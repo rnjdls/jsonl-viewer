@@ -1,0 +1,74 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: jsonl-viewer-db
+    environment:
+      POSTGRES_DB: jsonl
+      POSTGRES_USER: jsonl
+      POSTGRES_PASSWORD: jsonl
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: jsonl-viewer-backend:latest
+    container_name: jsonl-viewer-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/jsonl
+      SPRING_DATASOURCE_USERNAME: jsonl
+      SPRING_DATASOURCE_PASSWORD: jsonl
+      JSONL_FILE_PATH: /data/sample.jsonl
+      JSONL_TIMESTAMP_FIELD: timestamp
+      INGEST_POLL_INTERVAL_MS: 1000
+    volumes:
+      - ./data:/data
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  jsonl-viewer:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runner
+    image: jsonl-viewer:latest
+    container_name: jsonl-viewer
+    ports:
+      - "3000:80"          # access via http://localhost:3000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Optional: rebuild & hot-reload during development ───
+  jsonl-viewer-dev:
+    image: node:20-alpine
+    container_name: jsonl-viewer-dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules        # anonymous volume keeps node_modules in container
+    ports:
+      - "5173:5173"              # Vite default dev port
+    environment:
+      VITE_PROXY_TARGET: http://backend:8080
+    command: sh -c "npm ci && npm run dev -- --host"
+    depends_on:
+      - backend
+    profiles:
+      - dev                      # only starts with: docker compose --profile dev up
+
+volumes:
+  pgdata:

@@ -1,0 +1,98 @@
+import { FILTER_TYPE } from "../constants";
+
+/**
+ * @typedef {Object} FieldFilter
+ * @property {string} id
+ * @property {"field"} type
+ * @property {string} field   - Dot-notation path.
+ * @property {string} value   - Partial match string.
+ */
+
+/**
+ * @typedef {Object} TimestampFilter
+ * @property {string} id
+ * @property {"timestamp"} type
+ * @property {string} field   - Dot-notation path to the timestamp field.
+ * @property {string} from    - ISO date string (inclusive lower bound).
+ * @property {string} to      - ISO date string (inclusive upper bound).
+ */
+
+/** @typedef {FieldFilter | TimestampFilter} Filter */
+
+/**
+ * Reads a value from a nested object using a dot-notation path string.
+ * e.g. getByPath({ a: { b: 1 } }, "a.b") => 1
+ *
+ * @param {Object} obj
+ * @param {string} path
+ * @returns {*}
+ */
+export function getByPath(obj, path) {
+  return path.split(".").reduce((cur, key) => cur?.[key], obj);
+}
+
+/**
+ * Returns true if a single entry satisfies a single filter.
+ *
+ * @param {import("./jsonl").JsonlEntry} entry
+ * @param {Filter} filter
+ * @returns {boolean}
+ */
+function entryMatchesFilter(entry, filter) {
+  if (!entry.parsed) return true; // Always show parse errors.
+
+  if (filter.type === FILTER_TYPE.FIELD) {
+    const { field, value } = filter;
+    if (!field.trim()) return true;
+
+    const fieldValue = getByPath(entry.parsed, field.trim());
+    if (fieldValue === undefined || fieldValue === null) return false;
+    return String(fieldValue).toLowerCase().includes(value.toLowerCase());
+  }
+
+  if (filter.type === FILTER_TYPE.TIMESTAMP) {
+    const { field, from, to } = filter;
+    if (!field.trim()) return true;
+
+    const raw = getByPath(entry.parsed, field.trim());
+    if (raw === undefined || raw === null) return false;
+
+    const ts = new Date(raw).getTime();
+    if (Number.isNaN(ts)) return false;
+
+    const fromMs = from ? new Date(from).getTime() : -Infinity;
+    const toMs   = to   ? new Date(to).getTime()   : +Infinity;
+
+    return ts >= fromMs && ts <= toMs;
+  }
+
+  return true;
+}
+
+/**
+ * Returns true only when the entry satisfies ALL active filters (AND logic).
+ *
+ * @param {import("./jsonl").JsonlEntry} entry
+ * @param {Filter[]} filters
+ * @returns {boolean}
+ */
+export function entryMatchesAllFilters(entry, filters) {
+  return filters.every((f) => entryMatchesFilter(entry, f));
+}
+
+/**
+ * Returns true when a filter has enough information to actually constrain
+ * results (i.e. it isn't an empty/blank placeholder).
+ *
+ * @param {Filter} filter
+ * @returns {boolean}
+ */
+export function isFilterActive(filter) {
+  if (filter.type === FILTER_TYPE.FIELD) {
+    return filter.field.trim().length > 0;
+  }
+  if (filter.type === FILTER_TYPE.TIMESTAMP) {
+    return filter.field.trim().length > 0 && (!!filter.from || !!filter.to);
+  }
+  return false;
+}

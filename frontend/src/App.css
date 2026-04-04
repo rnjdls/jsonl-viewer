@@ -1,0 +1,132 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Error banner ───────────────────────────────────────── */
+.app-error {
+  background: rgba(255, 107, 107, 0.08);
+  border-bottom: 1px solid rgba(255, 107, 107, 0.25);
+  color: var(--warn);
+  padding: 8px 20px;
+  font-size: 12px;
+}
+
+/* ── Main scrollable content ────────────────────────────── */
+.app-main {
+  flex: 1;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  /* Ensure the column fills the full viewport width on large screens */
+  align-self: stretch;
+}
+
+/* ── Preview panel ─────────────────────────────────────── */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.preview-header h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.preview-header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preview-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--accent2);
+  color: var(--accent2);
+  background: rgba(77, 159, 255, 0.08);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition),
+    border-color var(--transition), opacity var(--transition);
+}
+
+.preview-btn:hover:not(:disabled) {
+  background: rgba(77, 159, 255, 0.2);
+  color: #fff;
+}
+
+.preview-btn--secondary {
+  border-color: var(--border);
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.preview-btn--secondary:hover:not(:disabled) {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.preview-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preview-empty,
+.preview-loading {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 10px 0;
+}
+
+/* ── Footer ─────────────────────────────────────────────── */
+.app-footer {
+  border-top: 1px solid var(--border);
+  padding: 7px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.app-footer-warn {
+  color: var(--warn);
+  opacity: 0.8;
+}
+
+.app-footer-time {
+  margin-left: auto;
+}
+
+.app-footer-meta strong {
+  color: var(--accent2);
+}

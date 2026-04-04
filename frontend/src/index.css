@@ -1,0 +1,74 @@
+/* ── Reset ─────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Design tokens ─────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --bg:        #0c0e12;
+  --surface:   #13161d;
+  --surface2:  #1a1e27;
+  --border:    #252a35;
+  --dim:       #3a4055;
+
+  /* Text */
+  --text:      #c8d0e0;
+  --text-dim:  #5a6480;
+
+  /* Accents */
+  --accent:    #00e5a0;
+  --accent2:   #4d9fff;
+  --warn:      #ff6b6b;
+  --yellow:    #fde047;
+
+  /* Syntax colours */
+  --syn-key:   #7dd3fc;
+  --syn-str:   #86efac;
+  --syn-num:   #fb923c;
+  --syn-bool:  #c084fc;
+  --syn-null:  #f472b6;
+  --syn-dim:   #3a4055;
+
+  /* Typography */
+  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Syne", sans-serif;
+
+  /* Radii */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+
+  /* Transitions */
+  --transition: 0.15s ease;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Animations ────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

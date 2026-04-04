@@ -1,0 +1,151 @@
+# JSONL Viewer (Spring Boot + Postgres + React)
+
+A local-first JSONL viewer optimized for large files by moving parsing and filtering to a Spring Boot backend backed by Postgres. The UI is count-first and uses a lazy preview to avoid rendering millions of rows in the browser.
+
+## Features
+
+- Backend ingests a JSONL file from a configured path and tails new lines.
+- Postgres storage for parsed JSON and raw lines.
+- Count-first UI: shows total and matching counts without rendering all rows.
+- Lazy preview with keyset pagination ("Load Preview" and "Load More").
+- Field contains filter (JSON path) and timestamp range filter.
+- Admin actions: reload file from start, delete all ingested rows.
+- Resumes ingestion after restart using persisted byte offsets.
+
+## Tech Stack
+
+Frontend
+- Vite + React
+- Plain CSS
+
+Backend
+- Java 21
+- Spring Boot (Web, Data JPA)
+- Jackson for JSON parsing
+- Hibernate native JSON mapping for JSONB columns
+
+Database
+- Postgres 16
+
+Infra / Dev
+- Docker Compose for local orchestration
+- Nginx for static hosting and API proxy in production container
+
+## How It Works
+
+1. The backend reads the JSONL file from `JSONL_FILE_PATH`.
+2. It tails the file, parses each line, and inserts rows into Postgres in batches.
+3. The UI requests counts and a small preview page from the backend instead of loading the full file.
+4. Filters are evaluated on the server using Postgres JSONB and timestamp columns.
+
+## Running With Docker Compose
+
+Prerequisites
+- Docker and Docker Compose
+- A JSONL file on your machine
+
+Steps
+1. Create a local `data/` directory in the repo root.
+2. Place your JSONL file at `data/logs.jsonl` (or change `JSONL_FILE_PATH` in `docker-compose.yml`).
+3. Start the stack:
+
+```bash
+docker compose up --build
+```
+
+Services
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8080`
+- Postgres: `localhost:5432`
+
+## Development (Frontend)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The dev server proxies `/api` to the backend. You can override the proxy target via `VITE_PROXY_TARGET`.
+
+## Configuration
+
+Backend environment variables (Docker Compose defaults shown in `docker-compose.yml`):
+
+- `JSONL_FILE_PATH` (required): path to the JSONL file inside the backend container.
+- `JSONL_TIMESTAMP_FIELD` (default: `timestamp`): dot-path to a timestamp field.
+- `INGEST_POLL_INTERVAL_MS` (default: `1000`): polling interval in ms.
+- `INGEST_BATCH_SIZE` (default: `500`): insert batch size.
+
+Database:
+
+- `SPRING_DATASOURCE_URL` (default: `jdbc:postgresql://db:5432/jsonl`)
+- `SPRING_DATASOURCE_USERNAME` (default: `jsonl`)
+- `SPRING_DATASOURCE_PASSWORD` (default: `jsonl`)
+- `spring.jpa.hibernate.ddl-auto=update` (schema managed by JPA/Hibernate)
+- `spring.sql.init.mode=never` (SQL init disabled)
+
+## API Endpoints
+
+- `GET /api/stats`
+  - Returns file path, counts, timestamp field, and last ingestion time.
+
+- `POST /api/filters/count`
+  - Body: `{ filters: [ { type, fieldPath, valueContains, from, to } ] }`
+  - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
+  - Returns `{ totalCount, matchCount }`
+
+- `POST /api/filters/preview`
+  - Body: `{ filters: [...], cursorId, limit }`
+  - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
+  - Returns `{ rows, nextCursorId }`
+  - Uses keyset pagination (`id > cursorId`).
+
+- `POST /api/admin/reset`
+  - Deletes all entries and updates ingest state to the end of the file.
+
+- `POST /api/admin/reload`
+  - Clears ingest state and re-reads the file from the start.
+
+## Data Model
+
+Tables are generated/updated via JPA annotations (`ddl-auto=update`).
+
+- `jsonl_entry`
+  - `id BIGSERIAL PRIMARY KEY`
+  - `file_path TEXT`
+  - `line_no BIGINT`
+  - `raw_line TEXT`
+  - `parsed JSONB`
+  - `parse_error TEXT`
+  - `ts TIMESTAMPTZ`
+  - `created_at TIMESTAMPTZ`
+
+- `ingest_state`
+  - `file_path TEXT PRIMARY KEY`
+  - `byte_offset BIGINT`
+  - `line_no BIGINT`
+  - `last_ingested_at TIMESTAMPTZ`
+
+Indexes
+- `jsonl_entry(file_path, id)` for keyset pagination
+- `jsonl_entry(file_path, ts)` for timestamp filtering
+
+## Performance Notes
+
+- Rendering is count-first to avoid huge DOM sizes.
+- Preview is limited to small pages (default 200 rows).
+- Backend uses batch inserts for ingestion.
+
+## Suggested Next Optimizations
+
+- Use Postgres COPY for faster ingestion on large files.
+- Add field pinning (computed columns + indexes) for hot JSON paths.
+- Add optional full-text search over `parsed` or a denormalized `search_text` column.
+- Add file rotation detection by inode and auto-reset ingest state.
+
+## Repository Layout
+
+- `frontend/` - React UI (Vite app + nginx Dockerfile/config)
+- `backend/` - Spring Boot service
+- `docker-compose.yml` - Full local stack

@@ -1,0 +1,207 @@
+/* ── Shell ──────────────────────────────────────────────── */
+.sb {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Toolbar ────────────────────────────────────────────── */
+.sb-toolbar {
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-toolbar-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+/* ── Add buttons ────────────────────────────────────────── */
+.sb-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--accent2);
+  color: var(--accent2);
+  background: rgba(77, 159, 255, 0.07);
+  transition: background var(--transition), color var(--transition);
+  letter-spacing: 0.04em;
+}
+
+.sb-add-btn:hover {
+  background: rgba(77, 159, 255, 0.18);
+  color: #fff;
+}
+
+.sb-add-btn--ts {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgba(253, 224, 71, 0.06);
+}
+
+.sb-add-btn--ts:hover {
+  background: rgba(253, 224, 71, 0.16);
+  color: #fff;
+}
+
+/* ── Clear all ──────────────────────────────────────────── */
+.sb-clear-all {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.sb-clear-all:hover {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ── Match count ────────────────────────────────────────── */
+.sb-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sb-count strong { color: var(--accent); }
+
+.sb-count-badge {
+  background: rgba(0, 229, 160, 0.1);
+  border: 1px solid rgba(0, 229, 160, 0.25);
+  color: var(--accent);
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 99px;
+}
+
+/* ── Filter rows container ──────────────────────────────── */
+.sb-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ── Individual filter row ──────────────────────────────── */
+.sb-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 20px;
+  border-top: 1px solid var(--border);
+  animation: fadeSlideIn 0.15s ease both;
+}
+
+.sb-row--field     { background: rgba(77, 159, 255, 0.03); }
+.sb-row--timestamp { background: rgba(253, 224, 71, 0.02); }
+
+/* ── Type badge ─────────────────────────────────────────── */
+.sb-row-type {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  width: 48px;
+  text-align: center;
+}
+
+.sb-row-type--field {
+  background: rgba(77, 159, 255, 0.12);
+  color: var(--accent2);
+  border: 1px solid rgba(77, 159, 255, 0.3);
+}
+
+.sb-row-type--ts {
+  background: rgba(253, 224, 71, 0.1);
+  color: var(--yellow);
+  border: 1px solid rgba(253, 224, 71, 0.3);
+}
+
+/* ── Inputs ─────────────────────────────────────────────── */
+.sb-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.sb-input:focus       { border-color: var(--accent2); }
+.sb-input::placeholder{ color: var(--text-dim); }
+
+/* datetime-local icon tint */
+.sb-input--datetime::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  cursor: pointer;
+}
+
+.sb-input--field    { width: 170px; }
+.sb-input--value    { width: 230px; }
+.sb-input--ts-field { width: 150px; }
+.sb-input--datetime { width: 192px; }
+
+/* ── Row separators ─────────────────────────────────────── */
+.sb-row-eq,
+.sb-row-between,
+.sb-row-and {
+  font-size: 11px;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+
+.sb-row-utc {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--yellow);
+  border: 1px solid rgba(253, 224, 71, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+/* ── Remove button ──────────────────────────────────────── */
+.sb-remove {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-left: auto;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.sb-remove:hover {
+  border-color: var(--warn);
+  color: var(--warn);
+}

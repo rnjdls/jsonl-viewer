@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jsonl}
+    username: ${SPRING_DATASOURCE_USERNAME:jsonl}
+    password: ${SPRING_DATASOURCE_PASSWORD:jsonl}
+  jpa:
+    hibernate:
+      ddl-auto: update
+  sql:
+    init:
+      mode: never
+  jackson:
+    serialization:
+      WRITE_DATES_AS_TIMESTAMPS: false
+
+app:
+  jsonl-file-path: ${JSONL_FILE_PATH:}
+  jsonl-timestamp-field: ${JSONL_TIMESTAMP_FIELD:timestamp}
+  ingest-poll-interval-ms: ${INGEST_POLL_INTERVAL_MS:1000}
+  ingest-batch-size: ${INGEST_BATCH_SIZE:500}
