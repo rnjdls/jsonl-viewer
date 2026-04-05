@@ -108,11 +108,11 @@ function FieldFilterRow({ filter, onUpdate, onRemove }) {
       <input
         className="sb-input sb-input--field"
         type="text"
-        placeholder="field.path"
+        placeholder="field key"
         value={filter.field}
         onChange={(e) => onUpdate({ field: e.target.value })}
         spellCheck={false}
-        aria-label="Field path"
+        aria-label="Field key"
       />
 
       <span className="sb-row-eq">=</span>

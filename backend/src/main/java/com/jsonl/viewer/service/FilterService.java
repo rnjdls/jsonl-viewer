@@ -35,17 +35,25 @@ public class FilterService {
     for (FilterCriteria filter : filters) {
       if (filter.type() == null) continue;
       if (filter.type().equalsIgnoreCase("field")) {
-        String fieldPath = safeTrim(filter.fieldPath());
-        if (fieldPath.isEmpty()) continue;
-        String jsonPath = toJsonPath(fieldPath);
+        String fieldKey = safeTrim(filter.fieldPath());
+        if (fieldKey.isEmpty()) continue;
         String value = filter.valueContains() == null ? "" : filter.valueContains();
         conditions.add(
-            "jsonb_path_query_first(parsed, ?" + nextParamIndex + "::jsonpath)::text ILIKE ?"
-                + (nextParamIndex + 1)
+            "EXISTS (" +
+                "SELECT 1 FROM (" +
+                "  SELECT parsed AS value " +
+                "  UNION ALL " +
+                "  SELECT node.value FROM jsonb_path_query(parsed, '$.**') AS node(value)" +
+                ") AS node " +
+                "WHERE jsonb_typeof(node.value) = 'object' " +
+                "AND jsonb_exists(node.value, ?" + nextParamIndex + ") " +
+                "AND jsonb_extract_path(node.value, ?" + (nextParamIndex + 1) + ")::text ILIKE ?" + (nextParamIndex + 2) +
+                ")"
         );
-        params.add(jsonPath);
+        params.add(fieldKey);
+        params.add(fieldKey);
         params.add("%" + value + "%");
-        nextParamIndex += 2;
+        nextParamIndex += 3;
       } else if (filter.type().equalsIgnoreCase("timestamp")) {
         if (filter.from() != null) {
           conditions.add("ts >= ?" + nextParamIndex);
@@ -113,16 +121,6 @@ public class FilterService {
 
   private String safeTrim(String value) {
     return value == null ? "" : value.trim();
-  }
-
-  private String toJsonPath(String fieldPath) {
-    String[] parts = fieldPath.split("\\.");
-    StringBuilder sb = new StringBuilder("$");
-    for (String part : parts) {
-      if (part.isBlank()) continue;
-      sb.append('.').append(part.replace("\"", ""));
-    }
-    return sb.toString();
   }
 
   private Instant parseInstant(String raw) {
