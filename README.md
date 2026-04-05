@@ -8,7 +8,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: shows total and matching counts without rendering all rows.
 - Lazy preview with keyset pagination ("Load Preview" and "Load More").
-- Field contains filter (JSON path) and timestamp range filter.
+- Field contains filter (JSON key searched anywhere in the JSON tree) and timestamp range filter.
 - Admin actions: reload file from start, delete all ingested rows.
 - Resumes ingestion after restart using persisted byte offsets.
 
@@ -92,11 +92,13 @@ Database:
 
 - `POST /api/filters/count`
   - Body: `{ filters: [ { type, fieldPath, valueContains, from, to } ] }`
+  - For `type: "field"`, `fieldPath` is treated as a key name and matched anywhere in the JSON tree (not dot-path syntax).
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
   - Returns `{ totalCount, matchCount }`
 
 - `POST /api/filters/preview`
   - Body: `{ filters: [...], cursorId, limit }`
+  - Field filter semantics are identical to `/api/filters/count` (key match anywhere).
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
   - Returns `{ rows, nextCursorId }`
   - Uses keyset pagination (`id > cursorId`).

@@ -4,7 +4,7 @@ import { FILTER_TYPE } from "../constants";
  * @typedef {Object} FieldFilter
  * @property {string} id
  * @property {"field"} type
- * @property {string} field   - Dot-notation path.
+ * @property {string} field   - JSON key name to search anywhere in the tree.
  * @property {string} value   - Partial match string.
  */
 
@@ -31,6 +31,37 @@ export function getByPath(obj, path) {
   return path.split(".").reduce((cur, key) => cur?.[key], obj);
 }
 
+function getValuesByKeyAnywhere(node, key, out = []) {
+  if (node === null || node === undefined) return out;
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      getValuesByKeyAnywhere(item, key, out);
+    }
+    return out;
+  }
+
+  if (typeof node !== "object") return out;
+
+  for (const [entryKey, entryValue] of Object.entries(node)) {
+    if (entryKey === key) {
+      out.push(entryValue);
+    }
+    getValuesByKeyAnywhere(entryValue, key, out);
+  }
+  return out;
+}
+
+function toSearchableText(value) {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 /**
  * Returns true if a single entry satisfies a single filter.
  *
@@ -43,11 +74,16 @@ function entryMatchesFilter(entry, filter) {
 
   if (filter.type === FILTER_TYPE.FIELD) {
     const { field, value } = filter;
-    if (!field.trim()) return true;
+    const fieldKey = field.trim();
+    if (!fieldKey) return true;
 
-    const fieldValue = getByPath(entry.parsed, field.trim());
-    if (fieldValue === undefined || fieldValue === null) return false;
-    return String(fieldValue).toLowerCase().includes(value.toLowerCase());
+    const values = getValuesByKeyAnywhere(entry.parsed, fieldKey);
+    if (values.length === 0) return false;
+
+    const needle = (value ?? "").toLowerCase();
+    return values.some((entryValue) =>
+      toSearchableText(entryValue).toLowerCase().includes(needle)
+    );
   }
 
   if (filter.type === FILTER_TYPE.TIMESTAMP) {
