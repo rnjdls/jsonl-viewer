@@ -52,8 +52,19 @@
   background: rgba(253, 224, 71, 0.06);
 }
 
+.sb-add-btn--text {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 229, 160, 0.07);
+}
+
 .sb-add-btn--ts:hover {
   background: rgba(253, 224, 71, 0.16);
+  color: #fff;
+}
+
+.sb-add-btn--text:hover {
+  background: rgba(0, 229, 160, 0.2);
   color: #fff;
 }
 
@@ -138,6 +149,7 @@
 }
 
 .sb-row--field     { background: rgba(77, 159, 255, 0.03); }
+.sb-row--text      { background: rgba(0, 229, 160, 0.04); }
 .sb-row--timestamp { background: rgba(253, 224, 71, 0.02); }
 
 /* ── Type badge ─────────────────────────────────────────── */
@@ -164,6 +176,12 @@
   border: 1px solid rgba(253, 224, 71, 0.3);
 }
 
+.sb-row-type--text {
+  background: rgba(0, 229, 160, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(0, 229, 160, 0.3);
+}
+
 /* ── Inputs ─────────────────────────────────────────────── */
 .sb-input {
   background: var(--bg);
@@ -187,6 +205,7 @@
 }
 
 .sb-input--field    { width: 170px; }
+.sb-input--text-query { width: min(580px, calc(100vw - 160px)); }
 .sb-input--value    { width: 230px; }
 .sb-input--ts-field { width: 150px; }
 .sb-input--datetime { width: 192px; }

@@ -17,7 +17,14 @@ import { FILTER_TYPE } from "../constants";
  * @property {string} to      - ISO date string (inclusive upper bound).
  */
 
-/** @typedef {FieldFilter | TimestampFilter} Filter */
+/**
+ * @typedef {Object} TextFilter
+ * @property {string} id
+ * @property {"text"} type
+ * @property {string} query
+ */
+
+/** @typedef {FieldFilter | TimestampFilter | TextFilter} Filter */
 
 /**
  * Reads a value from a nested object using a dot-notation path string.
@@ -102,6 +109,12 @@ function entryMatchesFilter(entry, filter) {
     return ts >= fromMs && ts <= toMs;
   }
 
+  if (filter.type === FILTER_TYPE.TEXT) {
+    const query = (filter.query ?? "").trim().toLowerCase();
+    if (!query) return true;
+    return toSearchableText(entry.parsed).toLowerCase().includes(query);
+  }
+
   return true;
 }
 
@@ -129,6 +142,9 @@ export function isFilterActive(filter) {
   }
   if (filter.type === FILTER_TYPE.TIMESTAMP) {
     return filter.field.trim().length > 0 && (!!filter.from || !!filter.to);
+  }
+  if (filter.type === FILTER_TYPE.TEXT) {
+    return (filter.query ?? "").trim().length > 0;
   }
   return false;
 }

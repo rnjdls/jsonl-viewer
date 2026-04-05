@@ -7,6 +7,7 @@ public class FilterSpec {
   private String type;
   private String fieldPath;
   private String valueContains;
+  private String query;
   private String from;
   private String to;
 
@@ -32,6 +33,14 @@ public class FilterSpec {
 
   public void setValueContains(String valueContains) {
     this.valueContains = valueContains;
+  }
+
+  public String getQuery() {
+    return query;
+  }
+
+  public void setQuery(String query) {
+    this.query = query;
   }
 
   public String getFrom() {

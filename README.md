@@ -8,7 +8,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: shows total and matching counts without rendering all rows.
 - Lazy preview with keyset pagination ("Load Preview" and "Load More").
-- Field contains filter (JSON key searched anywhere in the JSON tree) and timestamp range filter.
+- Field contains filter (JSON key searched anywhere in the JSON tree), full-text search over parsed JSON, and timestamp range filter.
 - Admin actions: reload file from start, delete all ingested rows.
 - Resumes ingestion after restart using persisted byte offsets.
 
@@ -91,14 +91,16 @@ Database:
   - Returns file path, counts, timestamp field, and last ingestion time.
 
 - `POST /api/filters/count`
-  - Body: `{ filters: [ { type, fieldPath, valueContains, from, to } ] }`
+  - Body: `{ filters: [ { type, fieldPath, valueContains, query, from, to } ] }`
   - For `type: "field"`, `fieldPath` is treated as a key name and matched anywhere in the JSON tree (not dot-path syntax).
+  - For `type: "text"`, `query` is matched with Postgres full-text search over `parsed::text`:
+    `to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', query)`.
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
   - Returns `{ totalCount, matchCount }`
 
 - `POST /api/filters/preview`
   - Body: `{ filters: [...], cursorId, limit }`
-  - Field filter semantics are identical to `/api/filters/count` (key match anywhere).
+  - Field/text/timestamp filter semantics are identical to `/api/filters/count`.
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
   - Returns `{ rows, nextCursorId }`
   - Uses keyset pagination (`id > cursorId`).
@@ -136,6 +138,8 @@ Ingest behavior note:
 Indexes
 - `jsonl_entry(file_path, id)` for keyset pagination
 - `jsonl_entry(file_path, ts)` for timestamp filtering
+- Optional full-text index for larger datasets:
+  `CREATE INDEX jsonl_entry_parsed_fts_idx ON jsonl_entry USING GIN (to_tsvector('simple', parsed::text));`
 
 ## Performance Notes
 

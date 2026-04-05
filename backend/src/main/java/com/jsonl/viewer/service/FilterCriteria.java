@@ -6,6 +6,7 @@ public record FilterCriteria(
     String type,
     String fieldPath,
     String valueContains,
+    String query,
     Instant from,
     Instant to
 ) {}
