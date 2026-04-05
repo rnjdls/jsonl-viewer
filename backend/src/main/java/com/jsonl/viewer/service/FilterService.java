@@ -31,6 +31,7 @@ public class FilterService {
     List<String> conditions = new ArrayList<>();
     List<Object> params = new ArrayList<>();
     int nextParamIndex = 2;
+    boolean hasTextFilter = false;
 
     for (FilterCriteria filter : filters) {
       if (filter.type() == null) continue;
@@ -54,6 +55,15 @@ public class FilterService {
         params.add(fieldKey);
         params.add("%" + value + "%");
         nextParamIndex += 3;
+      } else if (filter.type().equalsIgnoreCase("text")) {
+        String query = safeTrim(filter.query());
+        if (query.isEmpty()) continue;
+        hasTextFilter = true;
+        conditions.add(
+            "to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', ?" + nextParamIndex + ")"
+        );
+        params.add(query);
+        nextParamIndex++;
       } else if (filter.type().equalsIgnoreCase("timestamp")) {
         if (filter.from() != null) {
           conditions.add("ts >= ?" + nextParamIndex);
@@ -72,8 +82,10 @@ public class FilterService {
       return new FilterSql("WHERE file_path = ?1", List.of());
     }
 
-    String where = "WHERE file_path = ?1 AND (parsed IS NULL OR (parsed IS NOT NULL AND "
-        + String.join(" AND ", conditions) + "))";
+    String where = hasTextFilter
+        ? "WHERE file_path = ?1 AND parsed IS NOT NULL AND " + String.join(" AND ", conditions)
+        : "WHERE file_path = ?1 AND (parsed IS NULL OR (parsed IS NOT NULL AND "
+            + String.join(" AND ", conditions) + "))";
 
     return new FilterSql(where, params);
   }
@@ -93,12 +105,17 @@ public class FilterService {
         String type = safeTrim(spec.getType());
         if (type.isEmpty()) continue;
         if (type.equalsIgnoreCase("field")) {
-          result.add(new FilterCriteria(type, spec.getFieldPath(), spec.getValueContains(), null, null));
+          result.add(new FilterCriteria(type, spec.getFieldPath(), spec.getValueContains(), null, null, null));
+        } else if (type.equalsIgnoreCase("text")) {
+          String query = safeTrim(spec.getQuery());
+          if (!query.isEmpty()) {
+            result.add(new FilterCriteria(type, null, null, query, null, null));
+          }
         } else if (type.equalsIgnoreCase("timestamp")) {
           Instant from = parseInstant(spec.getFrom());
           Instant to = parseInstant(spec.getTo());
           if (from != null || to != null) {
-            result.add(new FilterCriteria(type, spec.getFieldPath(), null, from, to));
+            result.add(new FilterCriteria(type, spec.getFieldPath(), null, null, from, to));
           }
         }
       }
@@ -107,13 +124,13 @@ public class FilterService {
 
     String trimmedField = safeTrim(fieldPath);
     if (!trimmedField.isEmpty()) {
-      result.add(new FilterCriteria("field", trimmedField, valueContains, null, null));
+      result.add(new FilterCriteria("field", trimmedField, valueContains, null, null, null));
     }
 
     Instant from = parseInstant(timestampFrom);
     Instant to = parseInstant(timestampTo);
     if (from != null || to != null) {
-      result.add(new FilterCriteria("timestamp", null, null, from, to));
+      result.add(new FilterCriteria("timestamp", null, null, null, from, to));
     }
 
     return result;

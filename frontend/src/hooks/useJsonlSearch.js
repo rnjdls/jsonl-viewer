@@ -17,6 +17,16 @@ const makeFieldFilter = () => ({
 });
 
 /**
+ * Creates a blank full-text filter.
+ * @returns {{ id: string, type: "text", query: string }}
+ */
+const makeTextFilter = () => ({
+  id: nextId(),
+  type: FILTER_TYPE.TEXT,
+  query: "",
+});
+
+/**
  * Manages the collection of active filters and derives a filtered entry list.
  *
  * All filters are combined with AND logic: an entry must satisfy every active
@@ -48,6 +58,11 @@ export function useJsonlSearch(lines, options = {}) {
   /* ── Mutators ────────────────────────────────────────── */
   const addFieldFilter = useCallback(
     () => setFilters((prev) => [...prev, makeFieldFilter()]),
+    []
+  );
+
+  const addTextFilter = useCallback(
+    () => setFilters((prev) => [...prev, makeTextFilter()]),
     []
   );
 
@@ -95,6 +110,7 @@ export function useJsonlSearch(lines, options = {}) {
     hasActiveFilters: activeFilters.length > 0,
     hasAppliedFilters: appliedFilters.length > 0,
     addFieldFilter,
+    addTextFilter,
     addTimestampFilter,
     updateFilter,
     removeFilter,

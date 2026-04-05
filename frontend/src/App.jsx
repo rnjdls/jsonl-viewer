@@ -52,6 +52,7 @@ export default function App() {
     hasActiveFilters,
     hasAppliedFilters,
     addFieldFilter,
+    addTextFilter,
     addTimestampFilter,
     updateFilter,
     removeFilter,
@@ -62,20 +63,27 @@ export default function App() {
   const filterPayload = useMemo(() => {
     if (!appliedFilters || appliedFilters.length === 0) return { filters: [] };
     return {
-      filters: appliedFilters.map((filter) =>
-        filter.type === "field"
-          ? {
-              type: "field",
-              fieldPath: filter.field,
-              valueContains: filter.value,
-            }
-          : {
-              type: "timestamp",
-              fieldPath: filter.field,
-              from: toUtcTimestampPayload(filter.from),
-              to: toUtcTimestampPayload(filter.to),
-            }
-      ),
+      filters: appliedFilters.map((filter) => {
+        if (filter.type === "field") {
+          return {
+            type: "field",
+            fieldPath: filter.field,
+            valueContains: filter.value,
+          };
+        }
+        if (filter.type === "text") {
+          return {
+            type: "text",
+            query: filter.query,
+          };
+        }
+        return {
+          type: "timestamp",
+          fieldPath: filter.field,
+          from: toUtcTimestampPayload(filter.from),
+          to: toUtcTimestampPayload(filter.to),
+        };
+      }),
     };
   }, [appliedFilters]);
 
@@ -224,6 +232,7 @@ export default function App() {
         loading={countsLoading}
         timestampField={stats?.timestampField}
         onAddFieldFilter={addFieldFilter}
+        onAddTextFilter={addTextFilter}
         onAddTimestampFilter={addTimestampFilter}
         onUpdateFilter={updateFilter}
         onRemoveFilter={removeFilter}

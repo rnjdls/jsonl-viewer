@@ -43,6 +43,7 @@ export const LEVEL_STYLES = {
 
 export const FILTER_TYPE = {
   FIELD:     "field",
+  TEXT:      "text",
   TIMESTAMP: "timestamp",
 };
 

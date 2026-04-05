@@ -4,7 +4,7 @@ import "./SearchBar.css";
 /**
  * Multi-filter search bar.
  *
- * Renders the list of current filters (field filters and timestamp-range
+ * Renders the list of current filters (field, text, and timestamp-range
  * filters) and exposes controls to add, edit, and remove them.
  *
  * @param {{
@@ -18,6 +18,7 @@ import "./SearchBar.css";
  *   loading:              boolean,
  *   timestampField?:      string,
  *   onAddFieldFilter:     () => void,
+ *   onAddTextFilter:      () => void,
  *   onAddTimestampFilter: () => void,
  *   onUpdateFilter:       (id: string, patch: object) => void,
  *   onRemoveFilter:       (id: string) => void,
@@ -36,6 +37,7 @@ export function SearchBar({
   loading,
   timestampField,
   onAddFieldFilter,
+  onAddTextFilter,
   onAddTimestampFilter,
   onUpdateFilter,
   onRemoveFilter,
@@ -52,6 +54,9 @@ export function SearchBar({
 
         <button className="sb-add-btn" onClick={onAddFieldFilter} title="Add field filter">
           + Field
+        </button>
+        <button className="sb-add-btn sb-add-btn--text" onClick={onAddTextFilter} title="Add full-text filter">
+          + Text
         </button>
         <button className="sb-add-btn sb-add-btn--ts" onClick={onAddTimestampFilter} title="Add timestamp range filter">
           + Timestamp Range
@@ -85,22 +90,33 @@ export function SearchBar({
       {filters.length > 0 && (
         <div className="sb-filters">
           {filters.map((filter) =>
-            filter.type === FILTER_TYPE.FIELD ? (
-              <FieldFilterRow
-                key={filter.id}
-                filter={filter}
-                onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
-                onRemove={() => onRemoveFilter(filter.id)}
-              />
-            ) : (
-              <TimestampFilterRow
-                key={filter.id}
-                filter={filter}
-                timestampField={timestampField}
-                onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
-                onRemove={() => onRemoveFilter(filter.id)}
-              />
-            )
+            filter.type === FILTER_TYPE.FIELD
+              ? (
+                <FieldFilterRow
+                  key={filter.id}
+                  filter={filter}
+                  onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
+                  onRemove={() => onRemoveFilter(filter.id)}
+                />
+              )
+              : filter.type === FILTER_TYPE.TEXT
+                ? (
+                  <TextFilterRow
+                    key={filter.id}
+                    filter={filter}
+                    onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
+                    onRemove={() => onRemoveFilter(filter.id)}
+                  />
+                )
+                : (
+                  <TimestampFilterRow
+                    key={filter.id}
+                    filter={filter}
+                    timestampField={timestampField}
+                    onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
+                    onRemove={() => onRemoveFilter(filter.id)}
+                  />
+                )
           )}
         </div>
       )}
@@ -135,6 +151,28 @@ function FieldFilterRow({ filter, onUpdate, onRemove }) {
         onChange={(e) => onUpdate({ value: e.target.value })}
         spellCheck={false}
         aria-label="Match value"
+      />
+
+      <button className="sb-remove" onClick={onRemove} aria-label="Remove filter">✕</button>
+    </div>
+  );
+}
+
+/* ── TextFilterRow ─────────────────────────────────────── */
+
+function TextFilterRow({ filter, onUpdate, onRemove }) {
+  return (
+    <div className="sb-row sb-row--text">
+      <span className="sb-row-type sb-row-type--text">TEXT</span>
+
+      <input
+        className="sb-input sb-input--text-query"
+        type="text"
+        placeholder="search parsed JSON text"
+        value={filter.query}
+        onChange={(e) => onUpdate({ query: e.target.value })}
+        spellCheck={false}
+        aria-label="Full text query"
       />
 
       <button className="sb-remove" onClick={onRemove} aria-label="Remove filter">✕</button>
