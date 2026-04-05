@@ -47,19 +47,22 @@ export default function App() {
   const {
     filters,
     activeFilters,
+    appliedFilters,
     hasFilters,
     hasActiveFilters,
+    hasAppliedFilters,
     addFieldFilter,
     addTimestampFilter,
     updateFilter,
     removeFilter,
     clearAllFilters,
+    applyFilters,
   } = useJsonlSearch([], { timestampField: stats?.timestampField });
 
   const filterPayload = useMemo(() => {
-    if (!activeFilters || activeFilters.length === 0) return { filters: [] };
+    if (!appliedFilters || appliedFilters.length === 0) return { filters: [] };
     return {
-      filters: activeFilters.map((filter) =>
+      filters: appliedFilters.map((filter) =>
         filter.type === "field"
           ? {
               type: "field",
@@ -74,7 +77,7 @@ export default function App() {
             }
       ),
     };
-  }, [activeFilters]);
+  }, [appliedFilters]);
 
   const refreshStats = useCallback(async () => {
     try {
@@ -114,13 +117,13 @@ export default function App() {
     refreshCounts();
   }, [stats?.totalCount, stats?.filePath, refreshCounts]);
 
-  useEffect(() => {
-    refreshCounts();
+  const handleSearch = useCallback(async () => {
+    applyFilters();
     setPreviewRows([]);
     setPreviewCursor(0);
     setPreviewHasMore(false);
     setPreviewActive(false);
-  }, [refreshCounts]);
+  }, [applyFilters]);
 
   const loadPreview = useCallback(
     async (reset = false) => {
@@ -216,6 +219,7 @@ export default function App() {
         matchCount={matchCount}
         hasFilters={hasFilters}
         hasActiveFilters={hasActiveFilters}
+        hasAppliedFilters={hasAppliedFilters}
         activeCount={activeCount}
         loading={countsLoading}
         timestampField={stats?.timestampField}
@@ -224,6 +228,7 @@ export default function App() {
         onUpdateFilter={updateFilter}
         onRemoveFilter={removeFilter}
         onClearAll={clearAllFilters}
+        onSearch={handleSearch}
       />
 
       {error && (

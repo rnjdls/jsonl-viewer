@@ -13,6 +13,7 @@ import "./SearchBar.css";
  *   matchCount:           number,
  *   hasFilters:           boolean,
  *   hasActiveFilters:     boolean,
+ *   hasAppliedFilters:    boolean,
  *   activeCount:          number,
  *   loading:              boolean,
  *   timestampField?:      string,
@@ -21,6 +22,7 @@ import "./SearchBar.css";
  *   onUpdateFilter:       (id: string, patch: object) => void,
  *   onRemoveFilter:       (id: string) => void,
  *   onClearAll:           () => void,
+ *   onSearch:             () => void,
  * }} props
  */
 export function SearchBar({
@@ -29,6 +31,7 @@ export function SearchBar({
   matchCount,
   hasFilters,
   hasActiveFilters,
+  hasAppliedFilters,
   activeCount,
   loading,
   timestampField,
@@ -37,7 +40,10 @@ export function SearchBar({
   onUpdateFilter,
   onRemoveFilter,
   onClearAll,
+  onSearch,
 }) {
+  const canSearch = hasFilters || hasAppliedFilters;
+
   return (
     <div className="sb">
       {/* ── Toolbar row ──────────────────────────────────── */}
@@ -56,6 +62,10 @@ export function SearchBar({
             ✕ Clear all
           </button>
         )}
+
+        <button className="sb-search-btn" onClick={onSearch} disabled={!canSearch || loading}>
+          Search
+        </button>
 
         <span className="sb-count">
           {loading ? (

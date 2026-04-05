@@ -28,16 +28,21 @@ const makeFieldFilter = () => ({
 export function useJsonlSearch(lines, options = {}) {
   const defaultTimestampField = options.timestampField || "timestamp";
   const [filters, setFilters] = useState([]);
+  const [appliedFilterIds, setAppliedFilterIds] = useState([]);
 
   /* ── Derived state ───────────────────────────────────── */
   const activeFilters = useMemo(() => filters.filter(isFilterActive), [filters]);
+  const appliedFilters = useMemo(
+    () => activeFilters.filter((filter) => appliedFilterIds.includes(filter.id)),
+    [activeFilters, appliedFilterIds]
+  );
 
   const filtered = useMemo(
     () =>
-      activeFilters.length === 0
+      appliedFilters.length === 0
         ? lines
-        : lines.filter((entry) => entryMatchesAllFilters(entry, activeFilters)),
-    [lines, activeFilters]
+        : lines.filter((entry) => entryMatchesAllFilters(entry, appliedFilters)),
+    [lines, appliedFilters]
   );
 
   /* ── Mutators ────────────────────────────────────────── */
@@ -69,20 +74,31 @@ export function useJsonlSearch(lines, options = {}) {
 
   const removeFilter = useCallback((id) => {
     setFilters((prev) => prev.filter((f) => f.id !== id));
+    setAppliedFilterIds((prev) => prev.filter((filterId) => filterId !== id));
   }, []);
 
-  const clearAllFilters = useCallback(() => setFilters([]), []);
+  const clearAllFilters = useCallback(() => {
+    setFilters([]);
+    setAppliedFilterIds([]);
+  }, []);
+
+  const applyFilters = useCallback(() => {
+    setAppliedFilterIds(activeFilters.map((filter) => filter.id));
+  }, [activeFilters]);
 
   return {
     filters,
     activeFilters,
+    appliedFilters,
     filtered,
     hasFilters:       filters.length > 0,
     hasActiveFilters: activeFilters.length > 0,
+    hasAppliedFilters: appliedFilters.length > 0,
     addFieldFilter,
     addTimestampFilter,
     updateFilter,
     removeFilter,
     clearAllFilters,
+    applyFilters,
   };
 }
