@@ -123,6 +123,10 @@ Tables are generated/updated via JPA annotations (`ddl-auto=update`).
   - `ts TIMESTAMPTZ`
   - `created_at TIMESTAMPTZ`
 
+Ingest behavior note:
+- Root-level `parsed.headers` is stored decoded when it looks like printable base64 text.
+- `raw_line` is always stored exactly as the original JSONL line.
+
 - `ingest_state`
   - `file_path TEXT PRIMARY KEY`
   - `byte_offset BIGINT`

@@ -200,6 +200,7 @@ public class JsonlIngestService {
   private JsonlEntry parseLine(String filePath, long lineNo, String rawLine) {
     try {
       JsonNode node = objectMapper.readTree(rawLine);
+      Base64HeadersDecoder.decodeRootHeaders(node);
       Instant ts = extractTimestamp(node);
       return new JsonlEntry(filePath, lineNo, rawLine, node, null, ts);
     } catch (Exception e) {

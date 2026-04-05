@@ -26,20 +26,20 @@ public class JsonlEntry {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(name = "file_path", nullable = false)
+  @Column(name = "file_path", nullable = false, columnDefinition = "text")
   private String filePath;
 
   @Column(name = "line_no", nullable = false)
   private long lineNo;
 
-  @Column(name = "raw_line", nullable = false)
+  @Column(name = "raw_line", nullable = false, columnDefinition = "text")
   private String rawLine;
 
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "parsed", columnDefinition = "jsonb")
   private JsonNode parsed;
 
-  @Column(name = "parse_error")
+  @Column(name = "parse_error", columnDefinition = "text")
   private String parseError;
 
   @Column(name = "ts")
