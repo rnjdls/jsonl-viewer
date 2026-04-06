@@ -1,5 +1,6 @@
 # Java/Maven
 backend/target/
+mock-generator/target/
 *.class
 *.log
 *.jar
@@ -29,3 +30,4 @@ Thumbs.db
 .env.*
 coverage/
 PLAN.md
+data/generated.jsonl

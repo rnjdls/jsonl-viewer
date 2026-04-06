@@ -1,0 +1,7 @@
+generator:
+  sample-path: ${GENERATOR_SAMPLE_PATH:/data/sample.jsonl}
+  output-path: ${GENERATOR_OUTPUT_PATH:/data/generated.jsonl}
+  interval-ms: ${GENERATOR_INTERVAL_MS:2000}
+  batch-min: ${GENERATOR_BATCH_MIN:250}
+  batch-max: ${GENERATOR_BATCH_MAX:350}
+  truncate-on-start: ${GENERATOR_TRUNCATE_ON_START:true}
