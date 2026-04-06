@@ -1,0 +1,2 @@
+{"id": 501, "timestamp": "2026-01-02T03:04:05Z", "user": "alice", "action": "access", "details": {"value": 123.45, "flag": false, "notes": "seed"}, "headers": {"source": "dWktc2ltdWxhdG9y", "correlationId": "Y29yci1zZWVk", "sessionId": "c2Vzc2lvbi1zZWVk", "environment": "c3RhZ2luZw==", "eventTime": "MjAyNi0wMS0wMlQwMzowNDowNVo="}}
+this is not json

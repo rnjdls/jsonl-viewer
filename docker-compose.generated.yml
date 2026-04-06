@@ -1,0 +1,21 @@
+services:
+  mock-generator:
+    build:
+      context: ./mock-generator
+      dockerfile: Dockerfile
+    image: jsonl-viewer-mock-generator:latest
+    container_name: jsonl-viewer-mock-generator
+    environment:
+      GENERATOR_SAMPLE_PATH: /data/sample.jsonl
+      GENERATOR_OUTPUT_PATH: /data/generated.jsonl
+      GENERATOR_INTERVAL_MS: 2000
+      GENERATOR_BATCH_MIN: 250
+      GENERATOR_BATCH_MAX: 350
+      GENERATOR_TRUNCATE_ON_START: "true"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  backend:
+    environment:
+      JSONL_FILE_PATH: /data/generated.jsonl

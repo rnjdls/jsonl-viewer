@@ -46,11 +46,17 @@ Prerequisites
 
 Steps
 1. Create a local `data/` directory in the repo root.
-2. Place your JSONL file at `data/logs.jsonl` (or change `JSONL_FILE_PATH` in `docker-compose.yml`).
-3. Start the stack:
+2. Place your JSONL file at `data/sample.jsonl` (or change `JSONL_FILE_PATH` in `docker-compose.yml`).
+3. Start the viewer stack:
 
 ```bash
 docker compose up --build
+```
+
+4. Or run viewer + mock generator (backend reads `/data/generated.jsonl`):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.generated.yml up --build
 ```
 
 Services
@@ -158,4 +164,6 @@ Indexes
 
 - `frontend/` - React UI (Vite app + nginx Dockerfile/config)
 - `backend/` - Spring Boot service
+- `mock-generator/` - Spring Boot mock JSONL generator service
 - `docker-compose.yml` - Full local stack
+- `docker-compose.generated.yml` - Compose override to run backend against generated JSONL
