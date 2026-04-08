@@ -162,18 +162,24 @@ export default function App() {
     resetPreviewState();
   }, [applyFilters, resetPreviewState]);
 
+  const requestPreviewPage = useCallback(
+    async (cursor) =>
+      getPreview({
+        ...filterPayload,
+        cursor,
+        sortBy: previewSortBy,
+        sortDir: previewSortDir,
+        limit: previewLimit,
+      }),
+    [filterPayload, previewLimit, previewSortBy, previewSortDir]
+  );
+
   const fetchPreviewPage = useCallback(
-    async (cursor, targetPageIndex) => {
+    async (cursor, targetPageIndex, historySeed) => {
       if (!stats?.filePath) return;
       setPreviewLoading(true);
       try {
-        const data = await getPreview({
-          ...filterPayload,
-          cursor,
-          sortBy: previewSortBy,
-          sortDir: previewSortDir,
-          limit: previewLimit,
-        });
+        const data = await requestPreviewPage(cursor);
         const rows = data?.rows ?? [];
         const receivedNextCursor = data?.nextCursor ?? null;
         setPreviewRows(rows);
@@ -181,10 +187,13 @@ export default function App() {
         setPageIndex(targetPageIndex);
         setNextCursor(receivedNextCursor);
         setCursorHistory((prev) => {
-          const nextHistory = prev.slice(0, targetPageIndex + 1);
+          const baseHistory = historySeed ?? prev;
+          const nextHistory = [...baseHistory];
           nextHistory[targetPageIndex] = cursor ?? null;
           if (receivedNextCursor) {
             nextHistory[targetPageIndex + 1] = receivedNextCursor;
+          } else {
+            nextHistory.length = targetPageIndex + 1;
           }
           return nextHistory;
         });
@@ -195,7 +204,7 @@ export default function App() {
         setPreviewLoading(false);
       }
     },
-    [filterPayload, previewLimit, previewSortBy, previewSortDir, stats?.filePath]
+    [requestPreviewPage, stats?.filePath]
   );
 
   const handleLoadPreview = useCallback(async () => {
@@ -212,6 +221,39 @@ export default function App() {
     const prevCursor = cursorHistory[pageIndex - 1] ?? null;
     await fetchPreviewPage(prevCursor, pageIndex - 1);
   }, [cursorHistory, fetchPreviewPage, pageIndex, previewActive]);
+
+  const handlePageSelectChange = useCallback(
+    async (event) => {
+      if (!previewActive) return;
+      const requestedPage = Number.parseInt(event.target.value, 10);
+      if (Number.isNaN(requestedPage) || requestedPage < 1) return;
+
+      const targetPageIndex = requestedPage - 1;
+      if (targetPageIndex === pageIndex) return;
+
+      let workingHistory = [...cursorHistory];
+      let targetCursor = workingHistory[targetPageIndex];
+
+      if (targetCursor === undefined) {
+        let scanIndex = workingHistory.length - 1;
+        while (scanIndex < targetPageIndex) {
+          const scanCursor = workingHistory[scanIndex];
+          if (scanCursor === undefined) break;
+          const scanData = await requestPreviewPage(scanCursor);
+          const generatedNextCursor = scanData?.nextCursor ?? null;
+          if (!generatedNextCursor) break;
+          workingHistory[scanIndex + 1] = generatedNextCursor;
+          scanIndex += 1;
+        }
+        targetCursor = workingHistory[targetPageIndex];
+      }
+
+      if (targetCursor === undefined) return;
+
+      await fetchPreviewPage(targetCursor ?? null, targetPageIndex, workingHistory);
+    },
+    [cursorHistory, fetchPreviewPage, pageIndex, previewActive, requestPreviewPage]
+  );
 
   const handleSortByChange = useCallback(
     (event) => {
@@ -314,8 +356,10 @@ export default function App() {
   const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
   const matchCount = counts?.matchCount ?? 0;
   const activeCount = activeFilters?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(matchCount / previewLimit));
+  const selectedPage = Math.min(pageIndex + 1, totalPages);
   const canGoPrev = previewActive && pageIndex > 0;
-  const canGoNext = previewActive && Boolean(nextCursor);
+  const canGoNext = previewActive && pageIndex + 1 < totalPages && Boolean(nextCursor);
 
   const emptyVariant = statsError
     ? "backend-offline"
@@ -431,7 +475,22 @@ export default function App() {
                   {previewActive ? "Reload Preview" : "Load Preview"}
                 </button>
                 {previewActive && (
-                  <span className="preview-page">Page {pageIndex + 1}</span>
+                  <label className="preview-sort-label">
+                    Page
+                    <select
+                      className="preview-select"
+                      value={selectedPage}
+                      onChange={handlePageSelectChange}
+                      disabled={previewLoading || totalPages <= 1}
+                    >
+                      {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNo) => (
+                        <option key={`page-${pageNo}`} value={pageNo}>
+                          {pageNo}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="preview-page-total">of {totalPages}</span>
+                  </label>
                 )}
                 {previewActive && (
                   <button

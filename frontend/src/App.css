@@ -83,6 +83,11 @@
   letter-spacing: 0.04em;
 }
 
+.preview-page-total {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 .preview-select {
   min-height: 28px;
   border-radius: var(--radius-sm);
@@ -92,12 +97,6 @@
   padding: 4px 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-}
-
-.preview-page {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-dim);
 }
 
 .preview-btn {
