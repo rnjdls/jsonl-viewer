@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.postgresql.util.PGobject;
 import org.springframework.stereotype.Repository;
 
@@ -51,7 +52,9 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     int limitParamIndex = filterSql.params().size() + 3;
 
     String sql =
-        "SELECT id, line_no, raw_line, parsed, parse_error, ts " +
+        "SELECT id, line_no, ts, parsed->'key', parsed->'headers', parse_error, " +
+            "CASE WHEN parse_error IS NOT NULL THEN LEFT(raw_line, 500) ELSE NULL END AS raw_snippet, " +
+            "CASE WHEN parse_error IS NOT NULL THEN LENGTH(raw_line) > 500 ELSE NULL END AS raw_truncated " +
             "FROM jsonl_entry " + filterSql.whereClause() + " AND id > ?" + cursorParamIndex + " " +
             "ORDER BY id ASC LIMIT ?" + limitParamIndex;
 
@@ -68,13 +71,57 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
       result.add(new JsonlEntryRow(
           asLong(row[0]),
           asLong(row[1]),
-          row[2] == null ? null : row[2].toString(),
+          asInstant(row[2]),
           asJsonNode(row[3]),
-          row[4] == null ? null : row[4].toString(),
-          asInstant(row[5])
+          asJsonNode(row[4]),
+          row[5] == null ? null : row[5].toString(),
+          row[6] == null ? null : row[6].toString(),
+          asBoolean(row[7])
       ));
     }
     return result;
+  }
+
+  @Override
+  public Optional<JsonlEntryDetailRow> findEntryDetail(String filePath, long id) {
+    Query query = entityManager.createNativeQuery(
+        "SELECT id, line_no, ts, parsed, parse_error " +
+            "FROM jsonl_entry WHERE file_path = ?1 AND id = ?2 LIMIT 1"
+    );
+    query.setParameter(1, filePath);
+    query.setParameter(2, id);
+
+    @SuppressWarnings("unchecked")
+    List<Object[]> rows = query.getResultList();
+    if (rows.isEmpty()) {
+      return Optional.empty();
+    }
+
+    Object[] row = rows.get(0);
+    return Optional.of(new JsonlEntryDetailRow(
+        asLong(row[0]),
+        asLong(row[1]),
+        asInstant(row[2]),
+        asJsonNode(row[3]),
+        row[4] == null ? null : row[4].toString()
+    ));
+  }
+
+  @Override
+  public Optional<String> findRawLine(String filePath, long id) {
+    Query query = entityManager.createNativeQuery(
+        "SELECT raw_line FROM jsonl_entry WHERE file_path = ?1 AND id = ?2 LIMIT 1"
+    );
+    query.setParameter(1, filePath);
+    query.setParameter(2, id);
+
+    @SuppressWarnings("unchecked")
+    List<Object> rows = query.getResultList();
+    if (rows.isEmpty()) {
+      return Optional.empty();
+    }
+    Object row = rows.get(0);
+    return Optional.ofNullable(row == null ? null : row.toString());
   }
 
   private void bindFilterQueryParameters(Query query, String filePath, List<Object> filterParams) {
@@ -103,6 +150,12 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     if (value instanceof Timestamp timestamp) return timestamp.toInstant();
     if (value instanceof OffsetDateTime offsetDateTime) return offsetDateTime.toInstant();
     return Instant.parse(value.toString());
+  }
+
+  private Boolean asBoolean(Object value) {
+    if (value == null) return null;
+    if (value instanceof Boolean bool) return bool;
+    return Boolean.parseBoolean(value.toString());
   }
 
   private JsonNode asJsonNode(Object value) {

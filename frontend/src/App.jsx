@@ -6,7 +6,15 @@ import { SearchBar } from "./components/SearchBar/SearchBar";
 import { JsonCard } from "./components/JsonCard/JsonCard";
 import { EmptyState } from "./components/EmptyState/EmptyState";
 
-import { getCounts, getPreview, getStats, reloadData, resetData } from "./utils/api";
+import {
+  getCounts,
+  getEntry,
+  getEntryRaw,
+  getPreview,
+  getStats,
+  reloadData,
+  resetData,
+} from "./utils/api";
 
 import "./App.css";
 
@@ -41,6 +49,11 @@ export default function App() {
   const [previewHasMore, setPreviewHasMore] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
+  const [entryDetailsById, setEntryDetailsById] = useState({});
+  const [entryDetailsLoadingById, setEntryDetailsLoadingById] = useState({});
+  const [entryRawById, setEntryRawById] = useState({});
+  const [entryRawLoadingById, setEntryRawLoadingById] = useState({});
+  const [expandedById, setExpandedById] = useState({});
   const [error, setError] = useState("");
   const [actionState, setActionState] = useState({ reset: false, reload: false });
 
@@ -59,6 +72,18 @@ export default function App() {
     clearAllFilters,
     applyFilters,
   } = useJsonlSearch([], { timestampField: stats?.timestampField });
+
+  const resetPreviewState = useCallback(() => {
+    setPreviewRows([]);
+    setPreviewCursor(0);
+    setPreviewHasMore(false);
+    setPreviewActive(false);
+    setEntryDetailsById({});
+    setEntryDetailsLoadingById({});
+    setEntryRawById({});
+    setEntryRawLoadingById({});
+    setExpandedById({});
+  }, []);
 
   const filterPayload = useMemo(() => {
     if (!appliedFilters || appliedFilters.length === 0) return { filters: [] };
@@ -127,15 +152,15 @@ export default function App() {
 
   const handleSearch = useCallback(async () => {
     applyFilters();
-    setPreviewRows([]);
-    setPreviewCursor(0);
-    setPreviewHasMore(false);
-    setPreviewActive(false);
-  }, [applyFilters]);
+    resetPreviewState();
+  }, [applyFilters, resetPreviewState]);
 
   const loadPreview = useCallback(
     async (reset = false) => {
       if (!stats?.filePath) return;
+      if (reset) {
+        resetPreviewState();
+      }
       setPreviewLoading(true);
       try {
         const data = await getPreview({
@@ -146,7 +171,7 @@ export default function App() {
         const rows = data?.rows ?? [];
         setPreviewRows((prev) => (reset ? rows : [...prev, ...rows]));
         setPreviewHasMore(Boolean(data?.nextCursorId));
-        setPreviewCursor(data?.nextCursorId ?? previewCursor);
+        setPreviewCursor(data?.nextCursorId ?? (reset ? 0 : previewCursor));
         setPreviewActive(true);
         setError("");
       } catch (err) {
@@ -155,7 +180,49 @@ export default function App() {
         setPreviewLoading(false);
       }
     },
-    [filterPayload, previewCursor, stats?.filePath]
+    [filterPayload, previewCursor, resetPreviewState, stats?.filePath]
+  );
+
+  const handleLoadBody = useCallback(
+    async (id) => {
+      if (entryDetailsById[id] || entryDetailsLoadingById[id]) {
+        setExpandedById((prev) => ({ ...prev, [id]: true }));
+        return;
+      }
+      setEntryDetailsLoadingById((prev) => ({ ...prev, [id]: true }));
+      try {
+        const detail = await getEntry(id);
+        setEntryDetailsById((prev) => ({ ...prev, [id]: detail }));
+        setExpandedById((prev) => ({ ...prev, [id]: true }));
+        setError("");
+      } catch (err) {
+        setError(err.message || "Failed to load row body.");
+      } finally {
+        setEntryDetailsLoadingById((prev) => ({ ...prev, [id]: false }));
+      }
+    },
+    [entryDetailsById, entryDetailsLoadingById]
+  );
+
+  const handleCollapseBody = useCallback((id) => {
+    setExpandedById((prev) => ({ ...prev, [id]: false }));
+  }, []);
+
+  const handleLoadFullRaw = useCallback(
+    async (id) => {
+      if (entryRawById[id] || entryRawLoadingById[id]) return;
+      setEntryRawLoadingById((prev) => ({ ...prev, [id]: true }));
+      try {
+        const raw = await getEntryRaw(id);
+        setEntryRawById((prev) => ({ ...prev, [id]: raw }));
+        setError("");
+      } catch (err) {
+        setError(err.message || "Failed to load full raw line.");
+      } finally {
+        setEntryRawLoadingById((prev) => ({ ...prev, [id]: false }));
+      }
+    },
+    [entryRawById, entryRawLoadingById]
   );
 
   const handleReset = useCallback(async () => {
@@ -164,16 +231,13 @@ export default function App() {
       await resetData();
       await refreshStats();
       await refreshCounts();
-      setPreviewRows([]);
-      setPreviewActive(false);
-      setPreviewHasMore(false);
-      setPreviewCursor(0);
+      resetPreviewState();
     } catch (err) {
       setError(err.message || "Failed to reset data.");
     } finally {
       setActionState((prev) => ({ ...prev, reset: false }));
     }
-  }, [refreshCounts, refreshStats]);
+  }, [refreshCounts, refreshStats, resetPreviewState]);
 
   const handleReload = useCallback(async () => {
     setActionState((prev) => ({ ...prev, reload: true }));
@@ -181,16 +245,13 @@ export default function App() {
       await reloadData();
       await refreshStats();
       await refreshCounts();
-      setPreviewRows([]);
-      setPreviewActive(false);
-      setPreviewHasMore(false);
-      setPreviewCursor(0);
+      resetPreviewState();
     } catch (err) {
       setError(err.message || "Failed to reload data.");
     } finally {
       setActionState((prev) => ({ ...prev, reload: false }));
     }
-  }, [refreshCounts, refreshStats]);
+  }, [refreshCounts, refreshStats, resetPreviewState]);
 
   const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
   const matchCount = counts?.matchCount ?? 0;
@@ -199,12 +260,12 @@ export default function App() {
   const emptyVariant = statsError
     ? "backend-offline"
     : !stats?.filePath
-    ? "no-file"
-    : counts && totalCount === 0
-    ? "empty-file"
-    : counts && matchCount === 0 && hasActiveFilters
-    ? "no-results"
-    : null;
+      ? "no-file"
+      : counts && totalCount === 0
+        ? "empty-file"
+        : counts && matchCount === 0 && hasActiveFilters
+          ? "no-results"
+          : null;
 
   return (
     <div className="app">
@@ -291,14 +352,16 @@ export default function App() {
 
             {previewRows.map((row) => (
               <JsonCard
-                key={`${row.id}-${row.raw?.length || 0}`}
-                entry={{
-                  id: row.id,
-                  lineNo: row.lineNo,
-                  raw: row.raw,
-                  parsed: row.parsed,
-                  error: row.error,
-                }}
+                key={row.id}
+                row={row}
+                expanded={Boolean(expandedById[row.id])}
+                body={entryDetailsById[row.id]}
+                fullRaw={entryRawById[row.id]}
+                loadingBody={Boolean(entryDetailsLoadingById[row.id])}
+                loadingRaw={Boolean(entryRawLoadingById[row.id])}
+                onLoadBody={() => handleLoadBody(row.id)}
+                onLoadRaw={() => handleLoadFullRaw(row.id)}
+                onCollapse={() => handleCollapseBody(row.id)}
               />
             ))}
 
