@@ -16,6 +16,9 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 - `docs/`: Plans/notes (implemented plans live in `docs/plans/zz-implemented/` and always skip browsing the implemented folder)
 - `mock-generator/`: Optional Spring Boot service that appends to `data/generated.jsonl`
 
+## Plans workflow
+- Plan markdown files live under `docs/plans/`; once a plan is implemented and verified (tests/smoke check pass), move the plan file into `docs/plans/zz-implemented/`.
+
 ## Architecture rules
 - UI never loads full files; it requests counts + preview pages from `/api/*`.
 - Preview pagination stays keyset-based using an opaque cursor (`sortBy/sortDir` + stable `id` tie-breaker).
