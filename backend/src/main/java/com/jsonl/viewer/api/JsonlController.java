@@ -2,6 +2,7 @@ package com.jsonl.viewer.api;
 
 import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterCountResponse;
+import com.jsonl.viewer.api.dto.EntryDetailResponse;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.api.dto.PreviewResponse;
 import com.jsonl.viewer.api.dto.PreviewRow;
@@ -10,6 +11,7 @@ import com.jsonl.viewer.config.AppProperties;
 import com.jsonl.viewer.ingest.JsonlIngestService;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
+import com.jsonl.viewer.repo.JsonlEntryDetailRow;
 import com.jsonl.viewer.repo.JsonlEntryRow;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.Counts;
@@ -21,10 +23,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 @RestController
 @RequestMapping("/api")
@@ -104,10 +111,12 @@ public class JsonlController {
         .map(row -> new PreviewRow(
             row.id(),
             row.lineNo(),
-            row.raw(),
-            row.parsed(),
+            row.ts(),
+            row.key(),
+            row.headers(),
             row.error(),
-            row.ts()
+            row.rawSnippet(),
+            row.rawTruncated()
         ))
         .collect(Collectors.toList());
 
@@ -116,6 +125,24 @@ public class JsonlController {
         : null;
 
     return new PreviewResponse(responseRows, nextCursor);
+  }
+
+  @GetMapping("/entries/{id}")
+  public EntryDetailResponse entry(@PathVariable("id") long id) {
+    String filePath = requireFilePath();
+    JsonlEntryDetailRow row = jsonlEntryRepository.findEntryDetail(filePath, id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Entry not found"));
+    return new EntryDetailResponse(row.id(), row.lineNo(), row.ts(), row.parsed(), row.error());
+  }
+
+  @GetMapping(value = "/entries/{id}/raw", produces = MediaType.TEXT_PLAIN_VALUE)
+  public ResponseEntity<String> entryRaw(@PathVariable("id") long id) {
+    String filePath = requireFilePath();
+    String rawLine = jsonlEntryRepository.findRawLine(filePath, id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Entry not found"));
+    return ResponseEntity.ok()
+        .contentType(MediaType.TEXT_PLAIN)
+        .body(rawLine);
   }
 
   @PostMapping("/admin/reset")
@@ -128,5 +155,13 @@ public class JsonlController {
   public Map<String, String> reload() {
     ingestService.reloadFromStart();
     return Map.of("status", "ok");
+  }
+
+  private String requireFilePath() {
+    String filePath = properties.getJsonlFilePath();
+    if (filePath == null || filePath.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active source configured");
+    }
+    return filePath;
   }
 }

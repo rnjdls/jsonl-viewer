@@ -1,9 +1,10 @@
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 async function apiFetch(path, options = {}) {
+  const hasBody = options.body !== undefined;
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
-      "Content-Type": "application/json",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -16,6 +17,22 @@ async function apiFetch(path, options = {}) {
 
   if (res.status === 204) return null;
   return res.json();
+}
+
+async function apiFetchText(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const message = await res.text();
+    throw new Error(message || `Request failed (${res.status})`);
+  }
+
+  return res.text();
 }
 
 export function getStats() {
@@ -33,6 +50,18 @@ export function getPreview(payload) {
   return apiFetch("/filters/preview", {
     method: "POST",
     body: JSON.stringify(payload || {}),
+  });
+}
+
+export function getEntry(id) {
+  return apiFetch(`/entries/${id}`);
+}
+
+export function getEntryRaw(id) {
+  return apiFetchText(`/entries/${id}/raw`, {
+    headers: {
+      Accept: "text/plain",
+    },
   });
 }
 

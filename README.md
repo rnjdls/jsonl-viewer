@@ -108,8 +108,20 @@ Database:
   - Body: `{ filters: [...], cursorId, limit }`
   - Field/text/timestamp filter semantics are identical to `/api/filters/count`.
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
-  - Returns `{ rows, nextCursorId }`
+  - Returns `{ rows, nextCursorId }`, where each row includes:
+    - `id`, `lineNo`, `ts`
+    - `key` (`parsed->'key'`)
+    - `headers` (`parsed->'headers'`)
+    - `error` (`parse_error`)
+    - `rawSnippet` and `rawTruncated` only for parse-error rows
   - Uses keyset pagination (`id > cursorId`).
+
+- `GET /api/entries/{id}`
+  - Returns full row detail for the current file scope:
+    `{ id, lineNo, ts, parsed, error }`
+
+- `GET /api/entries/{id}/raw`
+  - Returns the full original raw line as `text/plain`.
 
 - `POST /api/admin/reset`
   - Deletes all entries and updates ingest state to the end of the file.

@@ -13,7 +13,7 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 - `backend/`: Spring Boot API + ingestion + DB access
 - `frontend/`: Vite/React UI + Nginx config + Dockerfile
 - `data/`: Mounted JSONL files (`sample.jsonl`, `generated.jsonl`); avoid committing large/volatile data
-- `docs/`: Plans/notes (implemented plans live in `docs/plans/zz-implemented/`)
+- `docs/`: Plans/notes (implemented plans live in `docs/plans/zz-implemented/` and always skip browsing the implemented folder)
 - `mock-generator/`: Optional Spring Boot service that appends to `data/generated.jsonl`
 
 ## Architecture rules
