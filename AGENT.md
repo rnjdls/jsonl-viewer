@@ -18,7 +18,7 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 
 ## Architecture rules
 - UI never loads full files; it requests counts + preview pages from `/api/*`.
-- Preview pagination stays keyset-based (`id > cursorId`).
+- Preview pagination stays keyset-based using an opaque cursor (`sortBy/sortDir` + stable `id` tie-breaker).
 - Ingestion is restart-safe via persisted offsets (`ingest_state`) and resets when the file shrinks.
 - New/changed filters must be updated in both backend (`FilterService`) and frontend (payload mapping in `frontend/src/App.jsx` + UI in `SearchBar`).
 
@@ -28,6 +28,7 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 - Frontend: functional components + hooks; keep API payload shape centralized.
 
 ## Testing (≥ 80% coverage)
+- For every implemented feature/plan: run a quick boot smoke test (bring the stack up and confirm backend + UI start). If boot fails, immediately investigate logs, find the root cause, and implement a fix before moving on.
 - Target: **≥ 80% line coverage** for backend + mock-generator core logic; add regression tests with bug fixes.
 - Run: `cd backend && mvn test` / `cd mock-generator && mvn test`
 - Frontend: no runner configured yet; if adding non-trivial logic, add tests + coverage (recommended: Vitest + React Testing Library).

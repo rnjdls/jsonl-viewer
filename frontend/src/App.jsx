@@ -18,7 +18,9 @@ import {
 
 import "./App.css";
 
-const PREVIEW_LIMIT = 200;
+const DEFAULT_PREVIEW_LIMIT = 10;
+const DEFAULT_SORT_BY = "timestamp";
+const DEFAULT_SORT_DIR = "desc";
 
 function toUtcTimestampPayload(value) {
   const trimmed = (value ?? "").trim();
@@ -45,8 +47,12 @@ export default function App() {
   const [counts, setCounts] = useState(null);
   const [countsLoading, setCountsLoading] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
-  const [previewCursor, setPreviewCursor] = useState(0);
-  const [previewHasMore, setPreviewHasMore] = useState(false);
+  const [previewLimit, setPreviewLimit] = useState(DEFAULT_PREVIEW_LIMIT);
+  const [previewSortBy, setPreviewSortBy] = useState(DEFAULT_SORT_BY);
+  const [previewSortDir, setPreviewSortDir] = useState(DEFAULT_SORT_DIR);
+  const [cursorHistory, setCursorHistory] = useState([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [nextCursor, setNextCursor] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
   const [entryDetailsById, setEntryDetailsById] = useState({});
@@ -75,8 +81,9 @@ export default function App() {
 
   const resetPreviewState = useCallback(() => {
     setPreviewRows([]);
-    setPreviewCursor(0);
-    setPreviewHasMore(false);
+    setCursorHistory([null]);
+    setPageIndex(0);
+    setNextCursor(null);
     setPreviewActive(false);
     setEntryDetailsById({});
     setEntryDetailsLoadingById({});
@@ -155,24 +162,32 @@ export default function App() {
     resetPreviewState();
   }, [applyFilters, resetPreviewState]);
 
-  const loadPreview = useCallback(
-    async (reset = false) => {
+  const fetchPreviewPage = useCallback(
+    async (cursor, targetPageIndex) => {
       if (!stats?.filePath) return;
-      if (reset) {
-        resetPreviewState();
-      }
       setPreviewLoading(true);
       try {
         const data = await getPreview({
           ...filterPayload,
-          cursorId: reset ? 0 : previewCursor,
-          limit: PREVIEW_LIMIT,
+          cursor,
+          sortBy: previewSortBy,
+          sortDir: previewSortDir,
+          limit: previewLimit,
         });
         const rows = data?.rows ?? [];
-        setPreviewRows((prev) => (reset ? rows : [...prev, ...rows]));
-        setPreviewHasMore(Boolean(data?.nextCursorId));
-        setPreviewCursor(data?.nextCursorId ?? (reset ? 0 : previewCursor));
+        const receivedNextCursor = data?.nextCursor ?? null;
+        setPreviewRows(rows);
         setPreviewActive(true);
+        setPageIndex(targetPageIndex);
+        setNextCursor(receivedNextCursor);
+        setCursorHistory((prev) => {
+          const nextHistory = prev.slice(0, targetPageIndex + 1);
+          nextHistory[targetPageIndex] = cursor ?? null;
+          if (receivedNextCursor) {
+            nextHistory[targetPageIndex + 1] = receivedNextCursor;
+          }
+          return nextHistory;
+        });
         setError("");
       } catch (err) {
         setError(err.message || "Failed to load preview.");
@@ -180,7 +195,50 @@ export default function App() {
         setPreviewLoading(false);
       }
     },
-    [filterPayload, previewCursor, resetPreviewState, stats?.filePath]
+    [filterPayload, previewLimit, previewSortBy, previewSortDir, stats?.filePath]
+  );
+
+  const handleLoadPreview = useCallback(async () => {
+    await fetchPreviewPage(null, 0);
+  }, [fetchPreviewPage]);
+
+  const handleNextPage = useCallback(async () => {
+    if (!previewActive || !nextCursor) return;
+    await fetchPreviewPage(nextCursor, pageIndex + 1);
+  }, [fetchPreviewPage, nextCursor, pageIndex, previewActive]);
+
+  const handlePrevPage = useCallback(async () => {
+    if (!previewActive || pageIndex === 0) return;
+    const prevCursor = cursorHistory[pageIndex - 1] ?? null;
+    await fetchPreviewPage(prevCursor, pageIndex - 1);
+  }, [cursorHistory, fetchPreviewPage, pageIndex, previewActive]);
+
+  const handleSortByChange = useCallback(
+    (event) => {
+      const nextSortBy = event.target.value;
+      setPreviewSortBy(nextSortBy);
+      resetPreviewState();
+    },
+    [resetPreviewState]
+  );
+
+  const handleSortDirChange = useCallback(
+    (event) => {
+      const nextSortDir = event.target.value;
+      setPreviewSortDir(nextSortDir);
+      resetPreviewState();
+    },
+    [resetPreviewState]
+  );
+
+  const handlePreviewLimitChange = useCallback(
+    (event) => {
+      const nextLimit = Number.parseInt(event.target.value, 10);
+      if (Number.isNaN(nextLimit)) return;
+      setPreviewLimit(nextLimit);
+      resetPreviewState();
+    },
+    [resetPreviewState]
   );
 
   const handleLoadBody = useCallback(
@@ -256,6 +314,8 @@ export default function App() {
   const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
   const matchCount = counts?.matchCount ?? 0;
   const activeCount = activeFilters?.length ?? 0;
+  const canGoPrev = previewActive && pageIndex > 0;
+  const canGoNext = previewActive && Boolean(nextCursor);
 
   const emptyVariant = statsError
     ? "backend-offline"
@@ -316,24 +376,79 @@ export default function App() {
               <div>
                 <h2>Preview</h2>
                 <p>
-                  Showing up to <strong>{PREVIEW_LIMIT}</strong> lines per page.
+                  Showing up to <strong>{previewLimit}</strong> lines per page.
                 </p>
+              </div>
+              <div className="preview-sort">
+                <label className="preview-sort-label">
+                  Lines/page
+                  <select
+                    className="preview-select"
+                    value={previewLimit}
+                    onChange={handlePreviewLimitChange}
+                    disabled={previewLoading}
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                    <option value={500}>500</option>
+                  </select>
+                </label>
+                <label className="preview-sort-label">
+                  Sort by
+                  <select
+                    className="preview-select"
+                    value={previewSortBy}
+                    onChange={handleSortByChange}
+                    disabled={previewLoading}
+                  >
+                    <option value="timestamp">Timestamp</option>
+                    <option value="lineNo">Line</option>
+                    <option value="id">ID</option>
+                  </select>
+                </label>
+                <label className="preview-sort-label">
+                  Direction
+                  <select
+                    className="preview-select"
+                    value={previewSortDir}
+                    onChange={handleSortDirChange}
+                    disabled={previewLoading}
+                  >
+                    <option value="asc">Asc</option>
+                    <option value="desc">Desc</option>
+                  </select>
+                </label>
               </div>
               <div className="preview-actions">
                 <button
                   className="preview-btn"
-                  onClick={() => loadPreview(true)}
+                  onClick={handleLoadPreview}
                   disabled={previewLoading || (counts && matchCount === 0)}
                 >
                   {previewActive ? "Reload Preview" : "Load Preview"}
                 </button>
-                {previewActive && previewHasMore && (
+                {previewActive && (
+                  <span className="preview-page">Page {pageIndex + 1}</span>
+                )}
+                {previewActive && (
                   <button
                     className="preview-btn preview-btn--secondary"
-                    onClick={() => loadPreview(false)}
-                    disabled={previewLoading}
+                    onClick={handlePrevPage}
+                    disabled={previewLoading || !canGoPrev}
                   >
-                    Load More
+                    Prev
+                  </button>
+                )}
+                {previewActive && (
+                  <button
+                    className="preview-btn preview-btn--secondary"
+                    onClick={handleNextPage}
+                    disabled={previewLoading || !canGoNext}
+                  >
+                    Next
                   </button>
                 )}
               </div>

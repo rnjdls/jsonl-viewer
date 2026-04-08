@@ -2,6 +2,7 @@ package com.jsonl.viewer.repo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jsonl.viewer.repo.PreviewQueryBuilder.PreviewQuery;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
@@ -47,21 +48,18 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
   }
 
   @Override
-  public List<JsonlEntryRow> preview(String filePath, FilterSql filterSql, long cursorId, int limit) {
-    int cursorParamIndex = filterSql.params().size() + 2;
-    int limitParamIndex = filterSql.params().size() + 3;
-
-    String sql =
-        "SELECT id, line_no, ts, parsed->'key', parsed->'headers', parse_error, " +
-            "CASE WHEN parse_error IS NOT NULL THEN LEFT(raw_line, 500) ELSE NULL END AS raw_snippet, " +
-            "CASE WHEN parse_error IS NOT NULL THEN LENGTH(raw_line) > 500 ELSE NULL END AS raw_truncated " +
-            "FROM jsonl_entry " + filterSql.whereClause() + " AND id > ?" + cursorParamIndex + " " +
-            "ORDER BY id ASC LIMIT ?" + limitParamIndex;
-
-    Query query = entityManager.createNativeQuery(sql);
+  public List<JsonlEntryRow> preview(
+      String filePath,
+      FilterSql filterSql,
+      String sortBy,
+      String sortDir,
+      PreviewCursor cursor,
+      int limit
+  ) {
+    PreviewQuery previewQuery = PreviewQueryBuilder.build(filterSql, sortBy, sortDir, cursor, limit);
+    Query query = entityManager.createNativeQuery(previewQuery.sql());
     bindFilterQueryParameters(query, filePath, filterSql.params());
-    query.setParameter(cursorParamIndex, cursorId);
-    query.setParameter(limitParamIndex, limit);
+    bindAdditionalQueryParameters(query, filterSql.params().size() + 2, previewQuery.params());
 
     @SuppressWarnings("unchecked")
     List<Object[]> rows = query.getResultList();
@@ -128,6 +126,12 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     query.setParameter(1, filePath);
     for (int i = 0; i < filterParams.size(); i++) {
       query.setParameter(i + 2, toNativeQueryValue(filterParams.get(i)));
+    }
+  }
+
+  private void bindAdditionalQueryParameters(Query query, int startIndex, List<Object> additionalParams) {
+    for (int i = 0; i < additionalParams.size(); i++) {
+      query.setParameter(startIndex + i, toNativeQueryValue(additionalParams.get(i)));
     }
   }
 

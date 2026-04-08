@@ -18,6 +18,7 @@ import org.hibernate.type.SqlTypes;
     name = "jsonl_entry",
     indexes = {
         @Index(name = "jsonl_entry_file_id_idx", columnList = "file_path,id"),
+        @Index(name = "jsonl_entry_file_line_no_id_idx", columnList = "file_path,line_no,id"),
         @Index(name = "jsonl_entry_file_ts_idx", columnList = "file_path,ts")
     }
 )

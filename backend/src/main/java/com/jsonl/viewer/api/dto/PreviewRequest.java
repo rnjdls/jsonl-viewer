@@ -10,7 +10,9 @@ public class PreviewRequest {
   private String timestampFrom;
   private String timestampTo;
   private List<FilterSpec> filters;
-  private Long cursorId;
+  private String sortBy;
+  private String sortDir;
+  private String cursor;
   private Integer limit;
 
   public String getFieldPath() {
@@ -53,12 +55,28 @@ public class PreviewRequest {
     this.filters = filters;
   }
 
-  public Long getCursorId() {
-    return cursorId;
+  public String getSortBy() {
+    return sortBy;
   }
 
-  public void setCursorId(Long cursorId) {
-    this.cursorId = cursorId;
+  public void setSortBy(String sortBy) {
+    this.sortBy = sortBy;
+  }
+
+  public String getSortDir() {
+    return sortDir;
+  }
+
+  public void setSortDir(String sortDir) {
+    this.sortDir = sortDir;
+  }
+
+  public String getCursor() {
+    return cursor;
+  }
+
+  public void setCursor(String cursor) {
+    this.cursor = cursor;
   }
 
   public Integer getLimit() {
