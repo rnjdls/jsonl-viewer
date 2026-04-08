@@ -16,8 +16,10 @@ import com.jsonl.viewer.repo.JsonlEntryRow;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.Counts;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
+import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.PreviewCursor;
 import com.jsonl.viewer.service.FilterCriteria;
 import com.jsonl.viewer.service.FilterService;
+import com.jsonl.viewer.service.PreviewCursorCodec;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -41,19 +43,22 @@ public class JsonlController {
   private final IngestStateRepository ingestStateRepository;
   private final FilterService filterService;
   private final JsonlIngestService ingestService;
+  private final PreviewCursorCodec previewCursorCodec;
 
   public JsonlController(
       AppProperties properties,
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
       FilterService filterService,
-      JsonlIngestService ingestService
+      JsonlIngestService ingestService,
+      PreviewCursorCodec previewCursorCodec
   ) {
     this.properties = properties;
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
     this.filterService = filterService;
     this.ingestService = ingestService;
+    this.previewCursorCodec = previewCursorCodec;
   }
 
   @GetMapping("/stats")
@@ -103,10 +108,12 @@ public class JsonlController {
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
     FilterSql filterSql = filterService.buildFilterSql(filters);
 
-    long cursor = safeRequest.getCursorId() == null ? 0 : Math.max(0, safeRequest.getCursorId());
-    int limit = safeRequest.getLimit() == null ? 200 : Math.min(500, Math.max(1, safeRequest.getLimit()));
+    String sortBy = normalizeSortBy(safeRequest.getSortBy());
+    String sortDir = normalizeSortDir(safeRequest.getSortDir());
+    PreviewCursor cursor = decodePreviewCursor(safeRequest.getCursor(), sortBy, sortDir);
+    int limit = safeRequest.getLimit() == null ? 10 : Math.min(500, Math.max(1, safeRequest.getLimit()));
 
-    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(filePath, filterSql, cursor, limit);
+    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(filePath, filterSql, sortBy, sortDir, cursor, limit);
     List<PreviewRow> responseRows = rows.stream()
         .map(row -> new PreviewRow(
             row.id(),
@@ -120,8 +127,8 @@ public class JsonlController {
         ))
         .collect(Collectors.toList());
 
-    Long nextCursor = responseRows.size() == limit
-        ? responseRows.get(responseRows.size() - 1).id()
+    String nextCursor = responseRows.size() == limit
+        ? previewCursorCodec.encode(toPreviewCursor(rows.get(rows.size() - 1), sortBy, sortDir))
         : null;
 
     return new PreviewResponse(responseRows, nextCursor);
@@ -163,5 +170,46 @@ public class JsonlController {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active source configured");
     }
     return filePath;
+  }
+
+  private PreviewCursor decodePreviewCursor(String rawCursor, String sortBy, String sortDir) {
+    try {
+      return previewCursorCodec.decode(rawCursor, sortBy, sortDir);
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  private String normalizeSortBy(String rawSortBy) {
+    if (rawSortBy == null || rawSortBy.isBlank()) {
+      return "timestamp";
+    }
+    if ("id".equalsIgnoreCase(rawSortBy)) {
+      return "id";
+    }
+    if ("lineno".equalsIgnoreCase(rawSortBy)) {
+      return "lineNo";
+    }
+    if ("timestamp".equalsIgnoreCase(rawSortBy)) {
+      return "timestamp";
+    }
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported sortBy: " + rawSortBy);
+  }
+
+  private String normalizeSortDir(String rawSortDir) {
+    if (rawSortDir == null || rawSortDir.isBlank()) {
+      return "desc";
+    }
+    if ("asc".equalsIgnoreCase(rawSortDir)) {
+      return "asc";
+    }
+    if ("desc".equalsIgnoreCase(rawSortDir)) {
+      return "desc";
+    }
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported sortDir: " + rawSortDir);
+  }
+
+  private PreviewCursor toPreviewCursor(JsonlEntryRow row, String sortBy, String sortDir) {
+    return new PreviewCursor(sortBy, sortDir, row.id(), row.lineNo(), row.ts());
   }
 }

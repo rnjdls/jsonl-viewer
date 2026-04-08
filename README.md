@@ -7,7 +7,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Backend ingests a JSONL file from a configured path and tails new lines.
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: shows total and matching counts without rendering all rows.
-- Lazy preview with keyset pagination ("Load Preview" and "Load More").
+- Lazy preview with keyset pagination ("Load Preview" with Next/Prev paging).
 - Field contains filter (JSON key searched anywhere in the JSON tree), full-text search over parsed JSON, and timestamp range filter.
 - Admin actions: reload file from start, delete all ingested rows.
 - Resumes ingestion after restart using persisted byte offsets.
@@ -105,16 +105,23 @@ Database:
   - Returns `{ totalCount, matchCount }`
 
 - `POST /api/filters/preview`
-  - Body: `{ filters: [...], cursorId, limit }`
+  - Body: `{ filters: [...], sortBy, sortDir, cursor, limit }`
+  - `sortBy`: `timestamp | lineNo | id` (default: `timestamp`)
+  - `sortDir`: `asc | desc` (default: `desc`)
+  - `limit`: page size (default: `10`, max: `500`)
+  - `cursor`: opaque Base64URL cursor returned by the previous page (`null` for page 1)
   - Field/text/timestamp filter semantics are identical to `/api/filters/count`.
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
-  - Returns `{ rows, nextCursorId }`, where each row includes:
+  - Returns `{ rows, nextCursor }`, where each row includes:
     - `id`, `lineNo`, `ts`
     - `key` (`parsed->'key'`)
     - `headers` (`parsed->'headers'`)
     - `error` (`parse_error`)
     - `rawSnippet` and `rawTruncated` only for parse-error rows
-  - Uses keyset pagination (`id > cursorId`).
+  - Uses keyset pagination with stable ordering:
+    - `id`: `ORDER BY id`
+    - `lineNo`: `ORDER BY line_no, id`
+    - `timestamp`: `ORDER BY ts NULLS LAST, id`
 
 - `GET /api/entries/{id}`
   - Returns full row detail for the current file scope:
@@ -155,6 +162,7 @@ Ingest behavior note:
 
 Indexes
 - `jsonl_entry(file_path, id)` for keyset pagination
+- `jsonl_entry(file_path, line_no, id)` for line sort pagination
 - `jsonl_entry(file_path, ts)` for timestamp filtering
 - Optional full-text index for larger datasets:
   `CREATE INDEX jsonl_entry_parsed_fts_idx ON jsonl_entry USING GIN (to_tsvector('simple', parsed::text));`
@@ -162,7 +170,7 @@ Indexes
 ## Performance Notes
 
 - Rendering is count-first to avoid huge DOM sizes.
-- Preview is limited to small pages (default 200 rows).
+- Preview is limited to small pages (default 10 rows).
 - Backend uses batch inserts for ingestion.
 
 ## Suggested Next Optimizations
