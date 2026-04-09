@@ -45,6 +45,39 @@ class FilterServiceTest {
   }
 
   @Test
+  void normalizeDefaultsFieldOpToContainsWhenMissing() {
+    FilterSpec spec = new FilterSpec();
+    spec.setType("field");
+    spec.setFieldPath("status");
+    spec.setValueContains("500");
+
+    FilterCountRequest request = new FilterCountRequest();
+    request.setFilters(List.of(spec));
+
+    List<FilterCriteria> normalized = filterService.normalize(request);
+
+    assertEquals(1, normalized.size());
+    assertEquals("field", normalized.get(0).type());
+    assertEquals("contains", normalized.get(0).op());
+  }
+
+  @Test
+  void normalizeNormalizesFieldOpAliases() {
+    FilterSpec spec = new FilterSpec();
+    spec.setType("field");
+    spec.setFieldPath("status");
+    spec.setOp("NOT NULL");
+
+    FilterCountRequest request = new FilterCountRequest();
+    request.setFilters(List.of(spec));
+
+    List<FilterCriteria> normalized = filterService.normalize(request);
+
+    assertEquals(1, normalized.size());
+    assertEquals("not_null", normalized.get(0).op());
+  }
+
+  @Test
   void normalizeParsesTimestampWithFractionalSecondsAndZulu() {
     FilterCriteria timestamp = normalizeTimestampFilter(
         "2026-04-06T13:23:58.801145590Z",
@@ -123,7 +156,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlAddsFullTextCondition() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("text", null, null, "worker failed", null, null)
+        new FilterCriteria("text", null, null, null, "worker failed", null, null)
     ));
 
     assertEquals(1, sql.params().size());
@@ -135,7 +168,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlIgnoresBlankTextQuery() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("text", null, null, "   ", null, null)
+        new FilterCriteria("text", null, null, null, "   ", null, null)
     ));
 
     assertEquals("WHERE file_path = ?1", sql.whereClause());
@@ -145,10 +178,88 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlWithoutTextFilterKeepsExistingParsedWrapper() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "500", null, null, null)
+        new FilterCriteria("field", "status", "contains", "500", null, null, null)
     ));
 
     assertTrue(sql.whereClause().contains("parsed IS NULL OR (parsed IS NOT NULL AND"));
+  }
+
+  @Test
+  void buildFilterSqlFieldContainsUsesIlikePredicate() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("field", "status", "contains", "500", null, null, null)
+    ));
+
+    assertEquals(List.of("status", "status", "%500%"), sql.params());
+    assertTrue(sql.whereClause().contains("jsonb_exists(node.value, ?2)"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3)::text ILIKE ?4"));
+  }
+
+  @Test
+  void buildFilterSqlFieldNullUsesNullPredicate() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("field", "status", "null", null, null, null, null)
+    ));
+
+    assertEquals(List.of("status", "status"), sql.params());
+    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'null'"));
+  }
+
+  @Test
+  void buildFilterSqlFieldNotNullUsesNotNullPredicate() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("field", "status", "not_null", null, null, null, null)
+    ));
+
+    assertEquals(List.of("status", "status"), sql.params());
+    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) <> 'null'"));
+  }
+
+  @Test
+  void buildFilterSqlFieldEmptyUsesEmptyPredicates() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("field", "details", "empty", null, null, null, null)
+    ));
+
+    assertEquals(List.of("details", "details"), sql.params());
+    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'string'"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '\"\"'::jsonb"));
+    assertTrue(sql.whereClause().contains("jsonb_array_length(jsonb_extract_path(node.value, ?3)) = 0"));
+    assertTrue(sql.whereClause().contains("jsonb_object_length(jsonb_extract_path(node.value, ?3)) = 0"));
+  }
+
+  @Test
+  void buildFilterSqlFieldNotEmptyUsesNotEmptyPredicates() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("field", "details", "not_empty", null, null, null, null)
+    ));
+
+    assertEquals(List.of("details", "details"), sql.params());
+    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'string'"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '\"\"'::jsonb"));
+    assertTrue(sql.whereClause().contains("jsonb_array_length(jsonb_extract_path(node.value, ?3)) > 0"));
+    assertTrue(sql.whereClause().contains("jsonb_object_length(jsonb_extract_path(node.value, ?3)) > 0"));
+    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) IN ('number','boolean')"));
+  }
+
+  @Test
+  void buildFilterSqlKeepsParameterOrderingAcrossMixedFilters() {
+    Instant from = Instant.parse("2026-04-06T13:23:58Z");
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("field", "status", "null", null, null, null, null),
+        new FilterCriteria("text", null, null, null, "worker failed", null, null),
+        new FilterCriteria("timestamp", null, null, null, null, from, null),
+        new FilterCriteria("field", "details", "contains", "Auto-generated", null, null, null)
+    ));
+
+    assertEquals(
+        List.of("status", "status", "worker failed", from, "details", "details", "%Auto-generated%"),
+        sql.params()
+    );
+    assertTrue(sql.whereClause().contains("jsonb_exists(node.value, ?2)"));
+    assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?4)"));
+    assertTrue(sql.whereClause().contains("ts >= ?5"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?7)::text ILIKE ?8"));
   }
 
   private FilterCriteria normalizeTimestampFilter(String from, String to) {

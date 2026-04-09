@@ -15,6 +15,7 @@ import {
   reloadData,
   resetData,
 } from "./utils/api";
+import { FIELD_FILTER_OP } from "./constants";
 
 import "./App.css";
 
@@ -83,10 +84,12 @@ export default function App() {
     return {
       filters: appliedFilters.map((filter) => {
         if (filter.type === "field") {
+          const op = filter.op || FIELD_FILTER_OP.CONTAINS;
           return {
             type: "field",
             fieldPath: filter.field,
-            valueContains: filter.value,
+            op,
+            ...(op === FIELD_FILTER_OP.CONTAINS ? { valueContains: filter.value } : {}),
           };
         }
         if (filter.type === "text") {

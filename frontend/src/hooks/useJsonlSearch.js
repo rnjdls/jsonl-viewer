@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { entryMatchesAllFilters, isFilterActive } from "../utils/search";
-import { FILTER_TYPE } from "../constants";
+import { FIELD_FILTER_OP, FILTER_TYPE } from "../constants";
 
 let _nextId = 1;
 const nextId = () => String(_nextId++);
@@ -12,6 +12,7 @@ const nextId = () => String(_nextId++);
 const makeFieldFilter = () => ({
   id:    nextId(),
   type:  FILTER_TYPE.FIELD,
+  op:    FIELD_FILTER_OP.CONTAINS,
   field: "",
   value: "",
 });

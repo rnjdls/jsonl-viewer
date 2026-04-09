@@ -1,9 +1,14 @@
-import { FILTER_TYPE } from "../constants";
+import { FIELD_FILTER_OP, FILTER_TYPE } from "../constants";
+
+/**
+ * @typedef {"contains" | "null" | "not_null" | "empty" | "not_empty"} FieldFilterOp
+ */
 
 /**
  * @typedef {Object} FieldFilter
  * @property {string} id
  * @property {"field"} type
+ * @property {FieldFilterOp} op
  * @property {string} field   - JSON key name to search anywhere in the tree.
  * @property {string} value   - Partial match string.
  */
@@ -69,6 +74,26 @@ function toSearchableText(value) {
   }
 }
 
+function normalizeFieldFilterOp(rawOp) {
+  const normalized = String(rawOp ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+
+  if (normalized === FIELD_FILTER_OP.NULL) return FIELD_FILTER_OP.NULL;
+  if (normalized === FIELD_FILTER_OP.NOT_NULL) return FIELD_FILTER_OP.NOT_NULL;
+  if (normalized === FIELD_FILTER_OP.EMPTY) return FIELD_FILTER_OP.EMPTY;
+  if (normalized === FIELD_FILTER_OP.NOT_EMPTY) return FIELD_FILTER_OP.NOT_EMPTY;
+  return FIELD_FILTER_OP.CONTAINS;
+}
+
+function isEmptyFieldValue(value) {
+  if (value === "") return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (value && typeof value === "object") return Object.keys(value).length === 0;
+  return false;
+}
+
 /**
  * Returns true if a single entry satisfies a single filter.
  *
@@ -83,9 +108,26 @@ function entryMatchesFilter(entry, filter) {
     const { field, value } = filter;
     const fieldKey = field.trim();
     if (!fieldKey) return true;
+    const op = normalizeFieldFilterOp(filter.op);
 
     const values = getValuesByKeyAnywhere(entry.parsed, fieldKey);
     if (values.length === 0) return false;
+
+    if (op === FIELD_FILTER_OP.NULL) {
+      return values.some((entryValue) => entryValue === null);
+    }
+
+    if (op === FIELD_FILTER_OP.NOT_NULL) {
+      return values.some((entryValue) => entryValue !== null);
+    }
+
+    if (op === FIELD_FILTER_OP.EMPTY) {
+      return values.some((entryValue) => isEmptyFieldValue(entryValue));
+    }
+
+    if (op === FIELD_FILTER_OP.NOT_EMPTY) {
+      return values.some((entryValue) => entryValue !== null && !isEmptyFieldValue(entryValue));
+    }
 
     const needle = (value ?? "").toLowerCase();
     return values.some((entryValue) =>
