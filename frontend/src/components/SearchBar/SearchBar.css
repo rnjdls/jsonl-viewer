@@ -198,17 +198,11 @@
 .sb-input:focus       { border-color: var(--accent2); }
 .sb-input::placeholder{ color: var(--text-dim); }
 
-/* datetime-local icon tint */
-.sb-input--datetime::-webkit-calendar-picker-indicator {
-  filter: invert(0.6);
-  cursor: pointer;
-}
-
 .sb-input--field    { width: 170px; }
 .sb-input--text-query { width: min(580px, calc(100vw - 160px)); }
 .sb-input--value    { width: 230px; }
 .sb-input--ts-field { width: 150px; }
-.sb-input--datetime { width: 192px; }
+.sb-input--datetime { width: min(360px, calc(100vw - 160px)); }
 
 /* ── Row separators ─────────────────────────────────────── */
 .sb-row-eq,
@@ -217,16 +211,6 @@
   font-size: 11px;
   color: var(--dim);
   flex-shrink: 0;
-}
-
-.sb-row-utc {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--yellow);
-  border: 1px solid rgba(253, 224, 71, 0.35);
-  border-radius: var(--radius-sm);
-  padding: 2px 6px;
-  font-weight: 700;
 }
 
 /* ── Remove button ──────────────────────────────────────── */

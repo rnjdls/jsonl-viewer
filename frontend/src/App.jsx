@@ -22,23 +22,9 @@ const DEFAULT_PREVIEW_LIMIT = 10;
 const DEFAULT_SORT_BY = "timestamp";
 const DEFAULT_SORT_DIR = "desc";
 
-function toUtcTimestampPayload(value) {
+function toTimestampPayload(value) {
   const trimmed = (value ?? "").trim();
-  if (!trimmed) return undefined;
-
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
-    return `${trimmed}:00Z`;
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
-    return `${trimmed}Z`;
-  }
-
-  if (trimmed.endsWith("Z")) {
-    return trimmed;
-  }
-
-  return `${trimmed}Z`;
+  return trimmed || undefined;
 }
 
 export default function App() {
@@ -112,8 +98,8 @@ export default function App() {
         return {
           type: "timestamp",
           fieldPath: filter.field,
-          from: toUtcTimestampPayload(filter.from),
-          to: toUtcTimestampPayload(filter.to),
+          from: toTimestampPayload(filter.from),
+          to: toTimestampPayload(filter.to),
         };
       }),
     };

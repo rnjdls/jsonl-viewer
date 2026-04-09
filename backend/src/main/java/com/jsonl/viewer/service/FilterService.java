@@ -4,7 +4,10 @@ import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterSpec;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class FilterService {
+  private static final long EPOCH_MILLIS_THRESHOLD = 1_000_000_000_000L;
 
   public List<FilterCriteria> normalize(FilterCountRequest request) {
     return normalizeInternal(request.getFilters(), request.getFieldPath(), request.getValueContains(),
@@ -141,9 +145,63 @@ public class FilterService {
   }
 
   private Instant parseInstant(String raw) {
-    if (raw == null || raw.isBlank()) return null;
+    String trimmed = safeTrim(raw);
+    if (trimmed.isEmpty()) return null;
+
+    Instant epochInstant = parseEpoch(trimmed);
+    if (epochInstant != null) return epochInstant;
+
+    Instant instant = parseAsInstant(trimmed);
+    if (instant != null) return instant;
+
+    Instant offsetDateTimeInstant = parseAsOffsetDateTime(trimmed);
+    if (offsetDateTimeInstant != null) return offsetDateTimeInstant;
+
+    Instant localDateTimeInstant = parseAsLocalDateTimeUtc(trimmed);
+    if (localDateTimeInstant != null) return localDateTimeInstant;
+
+    int firstSpace = trimmed.indexOf(' ');
+    if (firstSpace > 0 && firstSpace == trimmed.lastIndexOf(' ')) {
+      String withT = trimmed.substring(0, firstSpace) + "T" + trimmed.substring(firstSpace + 1);
+      Instant retriedOffsetDateTime = parseAsOffsetDateTime(withT);
+      if (retriedOffsetDateTime != null) return retriedOffsetDateTime;
+      return parseAsLocalDateTimeUtc(withT);
+    }
+
+    return null;
+  }
+
+  private Instant parseEpoch(String raw) {
+    if (!raw.matches("^[+-]?\\d+$")) return null;
+    try {
+      long epochValue = Long.parseLong(raw);
+      return epochValue > EPOCH_MILLIS_THRESHOLD
+          ? Instant.ofEpochMilli(epochValue)
+          : Instant.ofEpochSecond(epochValue);
+    } catch (NumberFormatException ignored) {
+      return null;
+    }
+  }
+
+  private Instant parseAsInstant(String raw) {
     try {
       return Instant.parse(raw);
+    } catch (DateTimeParseException ignored) {
+      return null;
+    }
+  }
+
+  private Instant parseAsOffsetDateTime(String raw) {
+    try {
+      return OffsetDateTime.parse(raw).toInstant();
+    } catch (DateTimeParseException ignored) {
+      return null;
+    }
+  }
+
+  private Instant parseAsLocalDateTimeUtc(String raw) {
+    try {
+      return LocalDateTime.parse(raw).toInstant(ZoneOffset.UTC);
     } catch (DateTimeParseException ignored) {
       return null;
     }
