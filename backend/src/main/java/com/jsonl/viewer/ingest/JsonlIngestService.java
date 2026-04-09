@@ -201,6 +201,7 @@ public class JsonlIngestService {
     try {
       JsonNode node = objectMapper.readTree(rawLine);
       Base64HeadersDecoder.decodeRootHeaders(node);
+      JsonUnicodeSanitizer.sanitize(node);
       Instant ts = extractTimestamp(node);
       return new JsonlEntry(filePath, lineNo, rawLine, node, null, ts);
     } catch (Exception e) {
