@@ -1,4 +1,9 @@
-import { FILTER_TYPE, COMMON_TIMESTAMP_FIELDS } from "../../constants";
+import {
+  COMMON_TIMESTAMP_FIELDS,
+  FIELD_FILTER_OP,
+  FIELD_FILTER_OP_OPTIONS,
+  FILTER_TYPE,
+} from "../../constants";
 import "./SearchBar.css";
 
 /**
@@ -127,6 +132,8 @@ export function SearchBar({
 /* ── FieldFilterRow ─────────────────────────────────────── */
 
 function FieldFilterRow({ filter, onUpdate, onRemove }) {
+  const op = filter.op || FIELD_FILTER_OP.CONTAINS;
+  const isContainsOp = op === FIELD_FILTER_OP.CONTAINS;
   return (
     <div className="sb-row sb-row--field">
       <span className="sb-row-type sb-row-type--field">FIELD</span>
@@ -141,17 +148,30 @@ function FieldFilterRow({ filter, onUpdate, onRemove }) {
         aria-label="Field key"
       />
 
-      <span className="sb-row-eq">=</span>
+      <select
+        className="sb-select sb-select--field-op"
+        value={op}
+        onChange={(e) => onUpdate({ op: e.target.value })}
+        aria-label="Field operation"
+      >
+        {FIELD_FILTER_OP_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
 
-      <input
-        className="sb-input sb-input--value"
-        type="text"
-        placeholder="value (partial match)"
-        value={filter.value}
-        onChange={(e) => onUpdate({ value: e.target.value })}
-        spellCheck={false}
-        aria-label="Match value"
-      />
+      {isContainsOp && (
+        <input
+          className="sb-input sb-input--value"
+          type="text"
+          placeholder="value (partial match)"
+          value={filter.value}
+          onChange={(e) => onUpdate({ value: e.target.value })}
+          spellCheck={false}
+          aria-label="Match value"
+        />
+      )}
 
       <button className="sb-remove" onClick={onRemove} aria-label="Remove filter">✕</button>
     </div>

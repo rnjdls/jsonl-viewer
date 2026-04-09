@@ -198,11 +198,26 @@
 .sb-input:focus       { border-color: var(--accent2); }
 .sb-input::placeholder{ color: var(--text-dim); }
 
+.sb-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.sb-select:focus { border-color: var(--accent2); }
+
 .sb-input--field    { width: 170px; }
 .sb-input--text-query { width: min(580px, calc(100vw - 160px)); }
 .sb-input--value    { width: 230px; }
 .sb-input--ts-field { width: 150px; }
 .sb-input--datetime { width: min(360px, calc(100vw - 160px)); }
+.sb-select--field-op { width: 130px; }
 
 /* ── Row separators ─────────────────────────────────────── */
 .sb-row-eq,

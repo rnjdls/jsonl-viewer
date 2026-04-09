@@ -47,6 +47,22 @@ export const FILTER_TYPE = {
   TIMESTAMP: "timestamp",
 };
 
+export const FIELD_FILTER_OP = {
+  CONTAINS:  "contains",
+  NULL:      "null",
+  NOT_NULL:  "not_null",
+  EMPTY:     "empty",
+  NOT_EMPTY: "not_empty",
+};
+
+export const FIELD_FILTER_OP_OPTIONS = [
+  { value: FIELD_FILTER_OP.CONTAINS, label: "CONTAINS" },
+  { value: FIELD_FILTER_OP.NULL, label: "NULL" },
+  { value: FIELD_FILTER_OP.NOT_NULL, label: "NOT NULL" },
+  { value: FIELD_FILTER_OP.EMPTY, label: "EMPTY" },
+  { value: FIELD_FILTER_OP.NOT_EMPTY, label: "NOT EMPTY" },
+];
+
 export const COMMON_TIMESTAMP_FIELDS = [
   "timestamp", "time", "created_at", "updated_at", "date", "datetime", "ts",
 ];

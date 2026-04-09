@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public class FilterSpec {
   private String type;
   private String fieldPath;
+  private String op;
   private String valueContains;
   private String query;
   private String from;
@@ -25,6 +26,14 @@ public class FilterSpec {
 
   public void setFieldPath(String fieldPath) {
     this.fieldPath = fieldPath;
+  }
+
+  public String getOp() {
+    return op;
+  }
+
+  public void setOp(String op) {
+    this.op = op;
   }
 
   public String getValueContains() {
