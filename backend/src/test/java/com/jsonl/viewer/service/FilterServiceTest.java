@@ -1,11 +1,13 @@
 package com.jsonl.viewer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterSpec;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +45,82 @@ class FilterServiceTest {
   }
 
   @Test
+  void normalizeParsesTimestampWithFractionalSecondsAndZulu() {
+    FilterCriteria timestamp = normalizeTimestampFilter(
+        "2026-04-06T13:23:58.801145590Z",
+        null
+    );
+
+    assertEquals(Instant.parse("2026-04-06T13:23:58.801145590Z"), timestamp.from());
+    assertNull(timestamp.to());
+  }
+
+  @Test
+  void normalizeParsesTimestampWithOffset() {
+    FilterCriteria timestamp = normalizeTimestampFilter(
+        "2026-04-06T13:23:58+08:00",
+        null
+    );
+
+    assertEquals(Instant.parse("2026-04-06T05:23:58Z"), timestamp.from());
+    assertNull(timestamp.to());
+  }
+
+  @Test
+  void normalizeParsesNaiveTimestampAsUtc() {
+    FilterCriteria timestamp = normalizeTimestampFilter(
+        "2026-04-06T13:23:58",
+        null
+    );
+
+    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), timestamp.from());
+    assertNull(timestamp.to());
+  }
+
+  @Test
+  void normalizeParsesSpaceSeparatedNaiveTimestampAsUtc() {
+    FilterCriteria timestamp = normalizeTimestampFilter(
+        "2026-04-06 13:23:58",
+        null
+    );
+
+    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), timestamp.from());
+    assertNull(timestamp.to());
+  }
+
+  @Test
+  void normalizeParsesEpochSecondsAndMillis() {
+    FilterCriteria timestamp = normalizeTimestampFilter(
+        "1712560000",
+        "1712560000000"
+    );
+
+    assertEquals(Instant.ofEpochSecond(1712560000L), timestamp.from());
+    assertEquals(Instant.ofEpochMilli(1712560000000L), timestamp.to());
+  }
+
+  @Test
+  void normalizeIgnoresMalformedTimestampBounds() {
+    FilterCriteria withOnlyValidUpperBound = normalizeTimestampFilter(
+        "not-a-timestamp",
+        "2026-04-06T13:23:58.801145590Z"
+    );
+    assertNull(withOnlyValidUpperBound.from());
+    assertEquals(Instant.parse("2026-04-06T13:23:58.801145590Z"), withOnlyValidUpperBound.to());
+
+    FilterSpec malformed = new FilterSpec();
+    malformed.setType("timestamp");
+    malformed.setFrom("still bad");
+    malformed.setTo("also bad");
+
+    FilterCountRequest request = new FilterCountRequest();
+    request.setFilters(List.of(malformed));
+
+    List<FilterCriteria> normalized = filterService.normalize(request);
+    assertTrue(normalized.isEmpty());
+  }
+
+  @Test
   void buildFilterSqlAddsFullTextCondition() {
     FilterSql sql = filterService.buildFilterSql(List.of(
         new FilterCriteria("text", null, null, "worker failed", null, null)
@@ -71,5 +149,20 @@ class FilterServiceTest {
     ));
 
     assertTrue(sql.whereClause().contains("parsed IS NULL OR (parsed IS NOT NULL AND"));
+  }
+
+  private FilterCriteria normalizeTimestampFilter(String from, String to) {
+    FilterSpec spec = new FilterSpec();
+    spec.setType("timestamp");
+    spec.setFrom(from);
+    spec.setTo(to);
+
+    FilterCountRequest request = new FilterCountRequest();
+    request.setFilters(List.of(spec));
+
+    List<FilterCriteria> normalized = filterService.normalize(request);
+    assertEquals(1, normalized.size());
+    assertEquals("timestamp", normalized.get(0).type());
+    return normalized.get(0);
   }
 }

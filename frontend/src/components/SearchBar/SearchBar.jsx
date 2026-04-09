@@ -184,6 +184,9 @@ function TextFilterRow({ filter, onUpdate, onRemove }) {
 
 function TimestampFilterRow({ filter, timestampField, onUpdate, onRemove }) {
   const placeholder = timestampField ? `${timestampField} (server)` : "timestamp field";
+  const fromPlaceholder = "2026-04-06T13:23:58.801145590Z";
+  const toPlaceholder = "2026-04-06T13:23:58+08:00 or 1712560000";
+  const epochHint = "Epoch examples: 1712560000 / 1712560000000";
   return (
     <div className="sb-row sb-row--timestamp">
       <span className="sb-row-type sb-row-type--ts">TIME</span>
@@ -209,25 +212,27 @@ function TimestampFilterRow({ filter, timestampField, onUpdate, onRemove }) {
 
       <input
         className="sb-input sb-input--datetime"
-        type="datetime-local"
-        step="1"
+        type="text"
+        placeholder={fromPlaceholder}
+        title={epochHint}
         value={filter.from}
         onChange={(e) => onUpdate({ from: e.target.value })}
-        aria-label="From date/time (UTC)"
+        spellCheck={false}
+        aria-label="From timestamp"
       />
 
       <span className="sb-row-and">and</span>
 
       <input
         className="sb-input sb-input--datetime"
-        type="datetime-local"
-        step="1"
+        type="text"
+        placeholder={toPlaceholder}
+        title={epochHint}
         value={filter.to}
         onChange={(e) => onUpdate({ to: e.target.value })}
-        aria-label="To date/time (UTC)"
+        spellCheck={false}
+        aria-label="To timestamp"
       />
-
-      <span className="sb-row-utc">UTC</span>
 
       <button className="sb-remove" onClick={onRemove} aria-label="Remove filter">✕</button>
     </div>
