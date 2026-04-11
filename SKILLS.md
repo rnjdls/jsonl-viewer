@@ -8,3 +8,8 @@ This repo includes a small set of reusable “skills” (agent workflows) as fol
 - **Skill file**: `skills/publish-squash-merge-main/SKILL.md`
 - **Optional helper script**: `skills/publish-squash-merge-main/scripts/publish_squash_merge.sh`
 
+## `package-dist-zip`
+
+- **When to use**: You want a shareable zip of the repo that excludes `mock-generator/`, `docs/`, `skills/`, `docker-compose.generated.yml`, `AGENT.md`, `SKILLS.md`, and git-related files.
+- **Skill file**: `skills/package-dist-zip/SKILL.md`
+- **Helper script**: `skills/package-dist-zip/scripts/package_dist_zip.sh`
