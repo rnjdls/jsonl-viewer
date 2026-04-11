@@ -224,8 +224,8 @@ class FilterServiceTest {
     assertEquals(List.of("details", "details"), sql.params());
     assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'string'"));
     assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '\"\"'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_array_length(jsonb_extract_path(node.value, ?3)) = 0"));
-    assertTrue(sql.whereClause().contains("jsonb_object_length(jsonb_extract_path(node.value, ?3)) = 0"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '[]'::jsonb"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '{}'::jsonb"));
   }
 
   @Test
@@ -237,8 +237,8 @@ class FilterServiceTest {
     assertEquals(List.of("details", "details"), sql.params());
     assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'string'"));
     assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '\"\"'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_array_length(jsonb_extract_path(node.value, ?3)) > 0"));
-    assertTrue(sql.whereClause().contains("jsonb_object_length(jsonb_extract_path(node.value, ?3)) > 0"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '[]'::jsonb"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '{}'::jsonb"));
     assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) IN ('number','boolean')"));
   }
 

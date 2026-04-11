@@ -192,15 +192,15 @@ public class FilterService {
     if (FIELD_OP_EMPTY.equals(op)) {
       return "(" +
           "(jsonb_typeof(" + extractedValue + ") = 'string' AND " + extractedValue + " = '\"\"'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'array' AND jsonb_array_length(" + extractedValue + ") = 0) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'object' AND jsonb_object_length(" + extractedValue + ") = 0)" +
+          "OR (jsonb_typeof(" + extractedValue + ") = 'array' AND " + extractedValue + " = '[]'::jsonb) " +
+          "OR (jsonb_typeof(" + extractedValue + ") = 'object' AND " + extractedValue + " = '{}'::jsonb)" +
           ")";
     }
     if (FIELD_OP_NOT_EMPTY.equals(op)) {
       return "(" +
           "(jsonb_typeof(" + extractedValue + ") = 'string' AND " + extractedValue + " <> '\"\"'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'array' AND jsonb_array_length(" + extractedValue + ") > 0) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'object' AND jsonb_object_length(" + extractedValue + ") > 0) " +
+          "OR (jsonb_typeof(" + extractedValue + ") = 'array' AND " + extractedValue + " <> '[]'::jsonb) " +
+          "OR (jsonb_typeof(" + extractedValue + ") = 'object' AND " + extractedValue + " <> '{}'::jsonb) " +
           "OR (jsonb_typeof(" + extractedValue + ") IN ('number','boolean'))" +
           ")";
     }
