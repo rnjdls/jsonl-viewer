@@ -17,6 +17,7 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 - `mock-generator/`: Optional Spring Boot service that appends to `data/generated.jsonl`
 
 ## Plans workflow
+- Before implementing a plan (i.e., before any code changes), create a fresh category branch for the work (e.g., `feature/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`).
 - Plan markdown files live under `docs/plans/`; once a plan is implemented and verified (tests/smoke check pass), move the plan file into `docs/plans/zz-implemented/`.
 
 ## Architecture rules
