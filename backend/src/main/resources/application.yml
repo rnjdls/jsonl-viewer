@@ -15,9 +15,38 @@ spring:
   jackson:
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:}
+    consumer:
+      group-id: ${KAFKA_GROUP_ID:jsonl-viewer}
+      client-id: ${KAFKA_CLIENT_ID:jsonl-viewer}
+      auto-offset-reset: ${KAFKA_AUTO_OFFSET_RESET:latest}
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:${INGEST_BATCH_SIZE:500}}
+    listener:
+      type: batch
+      ack-mode: batch
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      ssl.endpoint.identification.algorithm: ${KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM:https}
+    ssl:
+      key-store-location: ${KAFKA_SSL_KEYSTORE_LOCATION:file:/data/identity.jks}
+      key-store-password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+      key-store-type: ${KAFKA_SSL_KEYSTORE_TYPE:JKS}
+      trust-store-location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:${KAFKA_SSL_KEYSTORE_LOCATION:file:/data/identity.jks}}
+      trust-store-password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:${KAFKA_SSL_KEYSTORE_PASSWORD:}}
+      trust-store-type: ${KAFKA_SSL_TRUSTSTORE_TYPE:JKS}
+      key-password: ${KAFKA_SSL_KEY_PASSWORD:${KAFKA_SSL_KEYSTORE_PASSWORD:}}
 
 app:
+  ingest-mode: ${INGEST_MODE:file}
+  source-id: ${INGEST_SOURCE_ID:}
   jsonl-file-path: ${JSONL_FILE_PATH:}
   jsonl-timestamp-field: ${JSONL_TIMESTAMP_FIELD:timestamp}
   ingest-poll-interval-ms: ${INGEST_POLL_INTERVAL_MS:1000}
   ingest-batch-size: ${INGEST_BATCH_SIZE:500}
+  kafka:
+    topic: ${KAFKA_TOPIC:}
+    concurrency: ${KAFKA_CONCURRENCY:1}

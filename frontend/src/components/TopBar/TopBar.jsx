@@ -38,8 +38,8 @@ export function TopBar({
 
       <div className="topbar-source">
         <span className="topbar-label">Source</span>
-        <span className="topbar-source-value" title={filePath || "No file configured"}>
-          {filePath || "No file configured"}
+        <span className="topbar-source-value" title={filePath || "No source configured"}>
+          {filePath || "No source configured"}
         </span>
       </div>
 

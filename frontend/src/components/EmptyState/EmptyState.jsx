@@ -21,8 +21,8 @@ export function EmptyState({ variant }) {
       icon: "⬡",
       title: "No source configured",
       lines: [
-        "Set JSONL_FILE_PATH in the backend environment.",
-        "The backend will tail the file and ingest new lines automatically.",
+        "Set JSONL_FILE_PATH for file mode, or set KAFKA_BOOTSTRAP_SERVERS + KAFKA_TOPIC for kafka mode.",
+        "Choose mode with INGEST_MODE=file or INGEST_MODE=kafka.",
       ],
     },
     "empty-file": {

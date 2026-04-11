@@ -31,3 +31,4 @@ Thumbs.db
 coverage/
 PLAN.md
 data/generated.jsonl
+data/*.jks
