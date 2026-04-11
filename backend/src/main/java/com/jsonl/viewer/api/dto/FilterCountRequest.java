@@ -9,6 +9,7 @@ public class FilterCountRequest {
   private String valueContains;
   private String timestampFrom;
   private String timestampTo;
+  private String filtersOp;
   private List<FilterSpec> filters;
 
   public String getFieldPath() {
@@ -41,6 +42,14 @@ public class FilterCountRequest {
 
   public void setTimestampTo(String timestampTo) {
     this.timestampTo = timestampTo;
+  }
+
+  public String getFiltersOp() {
+    return filtersOp;
+  }
+
+  public void setFiltersOp(String filtersOp) {
+    this.filtersOp = filtersOp;
   }
 
   public List<FilterSpec> getFilters() {

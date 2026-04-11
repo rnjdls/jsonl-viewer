@@ -2,6 +2,7 @@ import {
   COMMON_TIMESTAMP_FIELDS,
   FIELD_FILTER_OP,
   FIELD_FILTER_OP_OPTIONS,
+  FILTERS_OP,
   FILTER_TYPE,
 } from "../../constants";
 import "./SearchBar.css";
@@ -20,11 +21,13 @@ import "./SearchBar.css";
  *   hasActiveFilters:     boolean,
  *   hasAppliedFilters:    boolean,
  *   activeCount:          number,
+ *   filtersOp:            import("../../utils/search").FiltersOp,
  *   loading:              boolean,
  *   timestampField?:      string,
  *   onAddFieldFilter:     () => void,
  *   onAddTextFilter:      () => void,
  *   onAddTimestampFilter: () => void,
+ *   onFiltersOpChange:    (op: import("../../utils/search").FiltersOp) => void,
  *   onUpdateFilter:       (id: string, patch: object) => void,
  *   onRemoveFilter:       (id: string) => void,
  *   onClearAll:           () => void,
@@ -39,17 +42,20 @@ export function SearchBar({
   hasActiveFilters,
   hasAppliedFilters,
   activeCount,
+  filtersOp,
   loading,
   timestampField,
   onAddFieldFilter,
   onAddTextFilter,
   onAddTimestampFilter,
+  onFiltersOpChange,
   onUpdateFilter,
   onRemoveFilter,
   onClearAll,
   onSearch,
 }) {
   const canSearch = hasFilters || hasAppliedFilters;
+  const operatorToggleDisabled = activeCount <= 1;
 
   return (
     <div className="sb">
@@ -66,6 +72,26 @@ export function SearchBar({
         <button className="sb-add-btn sb-add-btn--ts" onClick={onAddTimestampFilter} title="Add timestamp range filter">
           + Timestamp Range
         </button>
+
+        <div className="sb-match-toggle" role="group" aria-label="Filter match operator">
+          <span className="sb-match-label">Match</span>
+          <button
+            className={`sb-match-btn ${filtersOp === FILTERS_OP.AND ? "is-active" : ""}`}
+            onClick={() => onFiltersOpChange(FILTERS_OP.AND)}
+            disabled={operatorToggleDisabled}
+            type="button"
+          >
+            All (AND)
+          </button>
+          <button
+            className={`sb-match-btn ${filtersOp === FILTERS_OP.OR ? "is-active" : ""}`}
+            onClick={() => onFiltersOpChange(FILTERS_OP.OR)}
+            disabled={operatorToggleDisabled}
+            type="button"
+          >
+            Any (OR)
+          </button>
+        </div>
 
         {hasFilters && (
           <button className="sb-clear-all" onClick={onClearAll}>

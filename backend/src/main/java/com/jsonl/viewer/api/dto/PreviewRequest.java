@@ -9,6 +9,7 @@ public class PreviewRequest {
   private String valueContains;
   private String timestampFrom;
   private String timestampTo;
+  private String filtersOp;
   private List<FilterSpec> filters;
   private String sortBy;
   private String sortDir;
@@ -45,6 +46,14 @@ public class PreviewRequest {
 
   public void setTimestampTo(String timestampTo) {
     this.timestampTo = timestampTo;
+  }
+
+  public String getFiltersOp() {
+    return filtersOp;
+  }
+
+  public void setFiltersOp(String filtersOp) {
+    this.filtersOp = filtersOp;
   }
 
   public List<FilterSpec> getFilters() {

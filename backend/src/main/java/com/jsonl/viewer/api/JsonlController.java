@@ -90,7 +90,7 @@ public class JsonlController {
     }
     FilterCountRequest safeRequest = request == null ? new FilterCountRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    FilterSql filterSql = filterService.buildFilterSql(filters);
+    FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
 
     Counts counts = jsonlEntryRepository.getCounts(filePath);
     long matchCount = jsonlEntryRepository.countMatching(filePath, filterSql);
@@ -106,7 +106,7 @@ public class JsonlController {
     }
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    FilterSql filterSql = filterService.buildFilterSql(filters);
+    FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
 
     String sortBy = normalizeSortBy(safeRequest.getSortBy());
     String sortDir = normalizeSortDir(safeRequest.getSortDir());

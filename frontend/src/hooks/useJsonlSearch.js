@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { entryMatchesAllFilters, isFilterActive } from "../utils/search";
-import { FIELD_FILTER_OP, FILTER_TYPE } from "../constants";
+import { entryMatchesFilters, isFilterActive } from "../utils/search";
+import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
 
 let _nextId = 1;
 const nextId = () => String(_nextId++);
@@ -30,15 +30,13 @@ const makeTextFilter = () => ({
 /**
  * Manages the collection of active filters and derives a filtered entry list.
  *
- * All filters are combined with AND logic: an entry must satisfy every active
- * filter to appear in the results.
- *
  * @param {import("../utils/jsonl").JsonlEntry[]} lines
  * @param {{ timestampField?: string }} options
  */
 export function useJsonlSearch(lines, options = {}) {
   const defaultTimestampField = options.timestampField || "timestamp";
   const [filters, setFilters] = useState([]);
+  const [filtersOp, setFiltersOp] = useState(FILTERS_OP.AND);
   const [appliedFilterIds, setAppliedFilterIds] = useState([]);
 
   /* ── Derived state ───────────────────────────────────── */
@@ -52,8 +50,8 @@ export function useJsonlSearch(lines, options = {}) {
     () =>
       appliedFilters.length === 0
         ? lines
-        : lines.filter((entry) => entryMatchesAllFilters(entry, appliedFilters)),
-    [lines, appliedFilters]
+        : lines.filter((entry) => entryMatchesFilters(entry, appliedFilters, filtersOp)),
+    [lines, appliedFilters, filtersOp]
   );
 
   /* ── Mutators ────────────────────────────────────────── */
@@ -104,6 +102,7 @@ export function useJsonlSearch(lines, options = {}) {
 
   return {
     filters,
+    filtersOp,
     activeFilters,
     appliedFilters,
     filtered,
@@ -113,6 +112,7 @@ export function useJsonlSearch(lines, options = {}) {
     addFieldFilter,
     addTextFilter,
     addTimestampFilter,
+    setFiltersOp,
     updateFilter,
     removeFilter,
     clearAllFilters,
