@@ -8,7 +8,8 @@ import com.jsonl.viewer.api.dto.PreviewResponse;
 import com.jsonl.viewer.api.dto.PreviewRow;
 import com.jsonl.viewer.api.dto.StatsResponse;
 import com.jsonl.viewer.config.AppProperties;
-import com.jsonl.viewer.ingest.JsonlIngestService;
+import com.jsonl.viewer.config.IngestSourceResolver;
+import com.jsonl.viewer.ingest.IngestAdminService;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntryDetailRow;
@@ -39,41 +40,44 @@ import org.springframework.http.HttpStatus;
 @RequestMapping("/api")
 public class JsonlController {
   private final AppProperties properties;
+  private final IngestSourceResolver sourceResolver;
   private final JsonlEntryRepository jsonlEntryRepository;
   private final IngestStateRepository ingestStateRepository;
   private final FilterService filterService;
-  private final JsonlIngestService ingestService;
+  private final IngestAdminService ingestAdminService;
   private final PreviewCursorCodec previewCursorCodec;
 
   public JsonlController(
       AppProperties properties,
+      IngestSourceResolver sourceResolver,
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
       FilterService filterService,
-      JsonlIngestService ingestService,
+      IngestAdminService ingestAdminService,
       PreviewCursorCodec previewCursorCodec
   ) {
     this.properties = properties;
+    this.sourceResolver = sourceResolver;
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
     this.filterService = filterService;
-    this.ingestService = ingestService;
+    this.ingestAdminService = ingestAdminService;
     this.previewCursorCodec = previewCursorCodec;
   }
 
   @GetMapping("/stats")
   public StatsResponse stats() {
-    String filePath = properties.getJsonlFilePath();
-    if (filePath == null || filePath.isBlank()) {
+    String sourceId = sourceResolver.getActiveSourceId();
+    if (sourceId == null) {
       return new StatsResponse(null, properties.getJsonlTimestampField(), 0, 0, 0, null);
     }
-    Counts counts = jsonlEntryRepository.getCounts(filePath);
-    Instant lastIngest = ingestStateRepository.findById(filePath)
+    Counts counts = jsonlEntryRepository.getCounts(sourceId);
+    Instant lastIngest = ingestStateRepository.findById(sourceId)
         .map(IngestState::getLastIngestedAt)
         .orElse(null);
 
     return new StatsResponse(
-        filePath,
+        sourceId,
         properties.getJsonlTimestampField(),
         counts.total(),
         counts.parsed(),
@@ -84,24 +88,24 @@ public class JsonlController {
 
   @PostMapping("/filters/count")
   public FilterCountResponse count(@RequestBody(required = false) FilterCountRequest request) {
-    String filePath = properties.getJsonlFilePath();
-    if (filePath == null || filePath.isBlank()) {
+    String sourceId = sourceResolver.getActiveSourceId();
+    if (sourceId == null) {
       return new FilterCountResponse(0, 0);
     }
     FilterCountRequest safeRequest = request == null ? new FilterCountRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
     FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
 
-    Counts counts = jsonlEntryRepository.getCounts(filePath);
-    long matchCount = jsonlEntryRepository.countMatching(filePath, filterSql);
+    Counts counts = jsonlEntryRepository.getCounts(sourceId);
+    long matchCount = jsonlEntryRepository.countMatching(sourceId, filterSql);
 
     return new FilterCountResponse(counts.total(), matchCount);
   }
 
   @PostMapping("/filters/preview")
   public PreviewResponse preview(@RequestBody(required = false) PreviewRequest request) {
-    String filePath = properties.getJsonlFilePath();
-    if (filePath == null || filePath.isBlank()) {
+    String sourceId = sourceResolver.getActiveSourceId();
+    if (sourceId == null) {
       return new PreviewResponse(List.of(), null);
     }
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
@@ -113,7 +117,7 @@ public class JsonlController {
     PreviewCursor cursor = decodePreviewCursor(safeRequest.getCursor(), sortBy, sortDir);
     int limit = safeRequest.getLimit() == null ? 10 : Math.min(500, Math.max(1, safeRequest.getLimit()));
 
-    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(filePath, filterSql, sortBy, sortDir, cursor, limit);
+    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(sourceId, filterSql, sortBy, sortDir, cursor, limit);
     List<PreviewRow> responseRows = rows.stream()
         .map(row -> new PreviewRow(
             row.id(),
@@ -154,22 +158,22 @@ public class JsonlController {
 
   @PostMapping("/admin/reset")
   public Map<String, String> reset() {
-    ingestService.resetToFileEnd();
+    ingestAdminService.reset();
     return Map.of("status", "ok");
   }
 
   @PostMapping("/admin/reload")
   public Map<String, String> reload() {
-    ingestService.reloadFromStart();
+    ingestAdminService.reload();
     return Map.of("status", "ok");
   }
 
   private String requireFilePath() {
-    String filePath = properties.getJsonlFilePath();
-    if (filePath == null || filePath.isBlank()) {
+    String sourceId = sourceResolver.getActiveSourceId();
+    if (sourceId == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active source configured");
     }
-    return filePath;
+    return sourceId;
   }
 
   private PreviewCursor decodePreviewCursor(String rawCursor, String sortBy, String sortDir) {

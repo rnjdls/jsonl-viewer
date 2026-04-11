@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.config.AppProperties;
+import com.jsonl.viewer.config.IngestSourceResolver;
+import com.jsonl.viewer.ingest.IngestAdminService;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.PreviewCursor;
 import com.jsonl.viewer.service.FilterService;
@@ -28,13 +30,15 @@ class JsonlControllerPreviewTest {
     JsonlEntryRepository repository = proxyRepository(repositoryCalled);
     FilterService filterService = new FilterService();
     PreviewCursorCodec codec = new PreviewCursorCodec(new ObjectMapper());
+    IngestSourceResolver sourceResolver = new IngestSourceResolver(properties);
 
     JsonlController controller = new JsonlController(
         properties,
+        sourceResolver,
         repository,
         null,
         filterService,
-        null,
+        new NoopIngestAdminService(),
         codec
     );
 
@@ -86,5 +90,13 @@ class JsonlControllerPreviewTest {
           return null;
         }
     );
+  }
+
+  private static class NoopIngestAdminService implements IngestAdminService {
+    @Override
+    public void reset() {}
+
+    @Override
+    public void reload() {}
   }
 }

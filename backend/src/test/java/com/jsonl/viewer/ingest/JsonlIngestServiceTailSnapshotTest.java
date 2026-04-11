@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonl.viewer.config.AppProperties;
+import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntry;
@@ -70,9 +71,10 @@ class JsonlIngestServiceTailSnapshotTest {
 
       JsonlIngestService service = new JsonlIngestService(
           properties,
+          new IngestSourceResolver(properties),
           jsonlEntryRepository,
           ingestStateRepository,
-          new ObjectMapper(),
+          new JsonlEntryParser(new ObjectMapper(), properties),
           entityManager
       );
 

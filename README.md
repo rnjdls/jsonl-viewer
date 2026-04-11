@@ -5,6 +5,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 ## Features
 
 - Backend ingests a JSONL file from a configured path and tails new lines.
+- Optional Kafka ingest mode consumes one JSON object per Kafka message.
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: shows total and matching counts without rendering all rows.
 - Lazy preview with keyset pagination ("Load Preview" with Next/Prev paging).
@@ -33,10 +34,12 @@ Infra / Dev
 
 ## How It Works
 
-1. The backend reads the JSONL file from `JSONL_FILE_PATH`.
-2. It tails the file, parses each line, and inserts rows into Postgres in batches.
-3. The UI requests counts and a small preview page from the backend instead of loading the full file.
-4. Filters are evaluated on the server using Postgres JSONB and timestamp columns.
+1. The backend chooses ingest mode from `INGEST_MODE` (`file` by default).
+2. In `file` mode, it reads and tails `JSONL_FILE_PATH`.
+3. In `kafka` mode, it consumes from `KAFKA_TOPIC`.
+4. It parses each record and inserts rows into Postgres in batches.
+5. The UI requests counts and a small preview page from the backend instead of loading the full file.
+6. Filters are evaluated on the server using Postgres JSONB and timestamp columns.
 
 ## Running With Docker Compose
 
@@ -78,10 +81,51 @@ The dev server proxies `/api` to the backend. You can override the proxy target 
 
 Backend environment variables (Docker Compose defaults shown in `docker-compose.yml`):
 
+- `INGEST_MODE` (default: `file`): `file` or `kafka`.
+- `INGEST_SOURCE_ID` (optional, Kafka mode only): logical source id used for API `stats.filePath` and DB scoping. Default is `kafka:<topic>`.
 - `JSONL_FILE_PATH` (required): path to the JSONL file inside the backend container.
 - `JSONL_TIMESTAMP_FIELD` (default: `timestamp`): dot-path to a timestamp field.
 - `INGEST_POLL_INTERVAL_MS` (default: `1000`): polling interval in ms.
 - `INGEST_BATCH_SIZE` (default: `500`): insert batch size.
+
+Kafka (required when `INGEST_MODE=kafka`):
+
+- `KAFKA_BOOTSTRAP_SERVERS` (required): broker list, e.g. `kafka:9092`.
+- `KAFKA_TOPIC` (required): source topic.
+- `KAFKA_GROUP_ID` (default: `jsonl-viewer`): consumer group id used by ingest and admin reset/reload.
+- `KAFKA_CLIENT_ID` (default: `jsonl-viewer`)
+- `KAFKA_AUTO_OFFSET_RESET` (default: `latest`)
+- `KAFKA_CONCURRENCY` (default: `1`)
+- `KAFKA_MAX_POLL_RECORDS` (default: `INGEST_BATCH_SIZE`)
+- `KAFKA_SECURITY_PROTOCOL` (default: `PLAINTEXT`; set `SSL` for TLS)
+- `KAFKA_SSL_KEYSTORE_LOCATION` (default: `file:/data/identity.jks`)
+- `KAFKA_SSL_KEYSTORE_PASSWORD`
+- `KAFKA_SSL_KEYSTORE_TYPE` (default: `JKS`)
+- `KAFKA_SSL_TRUSTSTORE_LOCATION` (defaults to keystore path)
+- `KAFKA_SSL_TRUSTSTORE_PASSWORD` (defaults to keystore password)
+- `KAFKA_SSL_TRUSTSTORE_TYPE` (default: `JKS`)
+- `KAFKA_SSL_KEY_PASSWORD` (defaults to keystore password)
+
+Kafka mode examples:
+
+PLAINTEXT
+```bash
+INGEST_MODE=kafka
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_TOPIC=json-events
+KAFKA_GROUP_ID=jsonl-viewer-dev
+```
+
+SSL (JKS mounted at `/data/identity.jks`)
+```bash
+INGEST_MODE=kafka
+KAFKA_BOOTSTRAP_SERVERS=broker.example.com:9093
+KAFKA_TOPIC=json-events
+KAFKA_GROUP_ID=jsonl-viewer-prod
+KAFKA_SECURITY_PROTOCOL=SSL
+KAFKA_SSL_KEYSTORE_LOCATION=file:/data/identity.jks
+KAFKA_SSL_KEYSTORE_PASSWORD=change-me
+```
 
 Database:
 
@@ -94,7 +138,7 @@ Database:
 ## API Endpoints
 
 - `GET /api/stats`
-  - Returns file path, counts, timestamp field, and last ingestion time.
+  - Returns source id (`filePath` field for backward compatibility), counts, timestamp field, and last ingestion time.
 
 - `POST /api/filters/count`
   - Body: `{ filters: [ { type, fieldPath, valueContains, query, from, to } ] }`
@@ -131,10 +175,12 @@ Database:
   - Returns the full original raw line as `text/plain`.
 
 - `POST /api/admin/reset`
-  - Deletes all entries and updates ingest state to the end of the file.
+  - File mode: deletes all entries and updates ingest state to the end of the file.
+  - Kafka mode: seeks consumer-group offsets to end, clears rows, and resets ingest state.
 
 - `POST /api/admin/reload`
-  - Clears ingest state and re-reads the file from the start.
+  - File mode: clears ingest state and re-reads the file from the start.
+  - Kafka mode: seeks consumer-group offsets to beginning, clears rows, and resets ingest state.
 
 ## Data Model
 

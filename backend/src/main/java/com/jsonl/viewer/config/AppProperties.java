@@ -4,10 +4,29 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
+  private String ingestMode = "file";
+  private String sourceId;
   private String jsonlFilePath;
   private String jsonlTimestampField = "timestamp";
   private long ingestPollIntervalMs = 1000;
   private int ingestBatchSize = 500;
+  private Kafka kafka = new Kafka();
+
+  public String getIngestMode() {
+    return ingestMode;
+  }
+
+  public void setIngestMode(String ingestMode) {
+    this.ingestMode = ingestMode;
+  }
+
+  public String getSourceId() {
+    return sourceId;
+  }
+
+  public void setSourceId(String sourceId) {
+    this.sourceId = sourceId;
+  }
 
   public String getJsonlFilePath() {
     return jsonlFilePath;
@@ -39,5 +58,34 @@ public class AppProperties {
 
   public void setIngestBatchSize(int ingestBatchSize) {
     this.ingestBatchSize = ingestBatchSize;
+  }
+
+  public Kafka getKafka() {
+    return kafka;
+  }
+
+  public void setKafka(Kafka kafka) {
+    this.kafka = kafka;
+  }
+
+  public static class Kafka {
+    private String topic;
+    private int concurrency = 1;
+
+    public String getTopic() {
+      return topic;
+    }
+
+    public void setTopic(String topic) {
+      this.topic = topic;
+    }
+
+    public int getConcurrency() {
+      return concurrency;
+    }
+
+    public void setConcurrency(int concurrency) {
+      this.concurrency = concurrency;
+    }
   }
 }
