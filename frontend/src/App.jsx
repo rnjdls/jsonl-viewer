@@ -52,6 +52,7 @@ export default function App() {
 
   const {
     filters,
+    filtersOp,
     activeFilters,
     appliedFilters,
     hasFilters,
@@ -60,6 +61,7 @@ export default function App() {
     addFieldFilter,
     addTextFilter,
     addTimestampFilter,
+    setFiltersOp,
     updateFilter,
     removeFilter,
     clearAllFilters,
@@ -80,8 +82,11 @@ export default function App() {
   }, []);
 
   const filterPayload = useMemo(() => {
-    if (!appliedFilters || appliedFilters.length === 0) return { filters: [] };
+    if (!appliedFilters || appliedFilters.length === 0) {
+      return { filtersOp, filters: [] };
+    }
     return {
+      filtersOp,
       filters: appliedFilters.map((filter) => {
         if (filter.type === "field") {
           const op = filter.op || FIELD_FILTER_OP.CONTAINS;
@@ -106,7 +111,7 @@ export default function App() {
         };
       }),
     };
-  }, [appliedFilters]);
+  }, [appliedFilters, filtersOp]);
 
   const refreshStats = useCallback(async () => {
     try {
@@ -383,6 +388,7 @@ export default function App() {
         hasActiveFilters={hasActiveFilters}
         hasAppliedFilters={hasAppliedFilters}
         activeCount={activeCount}
+        filtersOp={filtersOp}
         loading={countsLoading}
         timestampField={stats?.timestampField}
         onAddFieldFilter={addFieldFilter}
@@ -390,6 +396,7 @@ export default function App() {
         onAddTimestampFilter={addTimestampFilter}
         onUpdateFilter={updateFilter}
         onRemoveFilter={removeFilter}
+        onFiltersOpChange={setFiltersOp}
         onClearAll={clearAllFilters}
         onSearch={handleSearch}
       />

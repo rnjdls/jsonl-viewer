@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class FilterService {
   private static final long EPOCH_MILLIS_THRESHOLD = 1_000_000_000_000L;
+  public static final String FILTERS_OP_AND = "and";
+  public static final String FILTERS_OP_OR = "or";
   private static final String FIELD_OP_CONTAINS = "contains";
   private static final String FIELD_OP_NULL = "null";
   private static final String FIELD_OP_NOT_NULL = "not_null";
@@ -34,6 +36,10 @@ public class FilterService {
   }
 
   public FilterSql buildFilterSql(List<FilterCriteria> filters) {
+    return buildFilterSql(filters, FILTERS_OP_AND);
+  }
+
+  public FilterSql buildFilterSql(List<FilterCriteria> filters, String filtersOp) {
     if (filters == null || filters.isEmpty()) {
       return new FilterSql("WHERE file_path = ?1", List.of());
     }
@@ -42,6 +48,7 @@ public class FilterService {
     List<Object> params = new ArrayList<>();
     int nextParamIndex = 2;
     boolean hasTextFilter = false;
+    boolean useOrMode = FILTERS_OP_OR.equals(normalizeFiltersOp(filtersOp));
 
     for (FilterCriteria filter : filters) {
       if (filter.type() == null) continue;
@@ -86,12 +93,23 @@ public class FilterService {
       return new FilterSql("WHERE file_path = ?1", List.of());
     }
 
+    String conditionJoin = useOrMode ? " OR " : " AND ";
+    String combinedConditions = String.join(conditionJoin, conditions);
+    if (useOrMode) {
+      combinedConditions = "(" + combinedConditions + ")";
+    }
+
     String where = hasTextFilter
-        ? "WHERE file_path = ?1 AND parsed IS NOT NULL AND " + String.join(" AND ", conditions)
+        ? "WHERE file_path = ?1 AND parsed IS NOT NULL AND " + combinedConditions
         : "WHERE file_path = ?1 AND (parsed IS NULL OR (parsed IS NOT NULL AND "
-            + String.join(" AND ", conditions) + "))";
+            + combinedConditions + "))";
 
     return new FilterSql(where, params);
+  }
+
+  public String normalizeFiltersOp(String rawFiltersOp) {
+    String normalized = safeTrim(rawFiltersOp).toLowerCase(Locale.ROOT);
+    return FILTERS_OP_OR.equals(normalized) ? FILTERS_OP_OR : FILTERS_OP_AND;
   }
 
   private List<FilterCriteria> normalizeInternal(

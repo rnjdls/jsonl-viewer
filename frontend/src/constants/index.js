@@ -47,6 +47,11 @@ export const FILTER_TYPE = {
   TIMESTAMP: "timestamp",
 };
 
+export const FILTERS_OP = {
+  AND: "and",
+  OR:  "or",
+};
+
 export const FIELD_FILTER_OP = {
   CONTAINS:  "contains",
   NULL:      "null",

@@ -1,4 +1,4 @@
-import { FIELD_FILTER_OP, FILTER_TYPE } from "../constants";
+import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
 
 /**
  * @typedef {"contains" | "null" | "not_null" | "empty" | "not_empty"} FieldFilterOp
@@ -30,6 +30,7 @@ import { FIELD_FILTER_OP, FILTER_TYPE } from "../constants";
  */
 
 /** @typedef {FieldFilter | TimestampFilter | TextFilter} Filter */
+/** @typedef {"and" | "or"} FiltersOp */
 
 /**
  * Reads a value from a nested object using a dot-notation path string.
@@ -85,6 +86,13 @@ function normalizeFieldFilterOp(rawOp) {
   if (normalized === FIELD_FILTER_OP.EMPTY) return FIELD_FILTER_OP.EMPTY;
   if (normalized === FIELD_FILTER_OP.NOT_EMPTY) return FIELD_FILTER_OP.NOT_EMPTY;
   return FIELD_FILTER_OP.CONTAINS;
+}
+
+function normalizeFiltersOp(rawOp) {
+  const normalized = String(rawOp ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === FILTERS_OP.OR ? FILTERS_OP.OR : FILTERS_OP.AND;
 }
 
 function isEmptyFieldValue(value) {
@@ -161,14 +169,25 @@ function entryMatchesFilter(entry, filter) {
 }
 
 /**
- * Returns true only when the entry satisfies ALL active filters (AND logic).
+ * Returns true when the entry satisfies active filters based on the provided
+ * boolean operator.
  *
  * @param {import("./jsonl").JsonlEntry} entry
  * @param {Filter[]} filters
+ * @param {FiltersOp} filtersOp
  * @returns {boolean}
  */
-export function entryMatchesAllFilters(entry, filters) {
+export function entryMatchesFilters(entry, filters, filtersOp = FILTERS_OP.AND) {
+  if (filters.length === 0) return true;
+  const normalizedOp = normalizeFiltersOp(filtersOp);
+  if (normalizedOp === FILTERS_OP.OR) {
+    return filters.some((f) => entryMatchesFilter(entry, f));
+  }
   return filters.every((f) => entryMatchesFilter(entry, f));
+}
+
+export function entryMatchesAllFilters(entry, filters) {
+  return entryMatchesFilters(entry, filters, FILTERS_OP.AND);
 }
 
 /**

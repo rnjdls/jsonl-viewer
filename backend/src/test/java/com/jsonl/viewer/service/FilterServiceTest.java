@@ -243,14 +243,34 @@ class FilterServiceTest {
   }
 
   @Test
-  void buildFilterSqlKeepsParameterOrderingAcrossMixedFilters() {
+  void buildFilterSqlOrModeWrapsAndJoinsConditionsWithOr() {
     Instant from = Instant.parse("2026-04-06T13:23:58Z");
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "null", null, null, null, null),
-        new FilterCriteria("text", null, null, null, "worker failed", null, null),
-        new FilterCriteria("timestamp", null, null, null, null, from, null),
-        new FilterCriteria("field", "details", "contains", "Auto-generated", null, null, null)
-    ));
+    FilterSql sql = filterService.buildFilterSql(
+        List.of(
+            new FilterCriteria("text", null, null, null, "timeout", null, null),
+            new FilterCriteria("timestamp", null, null, null, null, from, null),
+            new FilterCriteria("field", "status", "null", null, null, null, null)
+        ),
+        "OR"
+    );
+
+    assertEquals(List.of("timeout", from, "status", "status"), sql.params());
+    assertTrue(sql.whereClause().contains("parsed IS NOT NULL AND ("));
+    assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?2) OR ts >= ?3 OR EXISTS ("));
+  }
+
+  @Test
+  void buildFilterSqlOrModeKeepsParameterOrderingAcrossMixedFilters() {
+    Instant from = Instant.parse("2026-04-06T13:23:58Z");
+    FilterSql sql = filterService.buildFilterSql(
+        List.of(
+            new FilterCriteria("field", "status", "null", null, null, null, null),
+            new FilterCriteria("text", null, null, null, "worker failed", null, null),
+            new FilterCriteria("timestamp", null, null, null, null, from, null),
+            new FilterCriteria("field", "details", "contains", "Auto-generated", null, null, null)
+        ),
+        "or"
+    );
 
     assertEquals(
         List.of("status", "status", "worker failed", from, "details", "details", "%Auto-generated%"),
@@ -260,6 +280,44 @@ class FilterServiceTest {
     assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?4)"));
     assertTrue(sql.whereClause().contains("ts >= ?5"));
     assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?7)::text ILIKE ?8"));
+    assertTrue(sql.whereClause().contains(" OR "));
+  }
+
+  @Test
+  void buildFilterSqlAndModeKeepsParameterOrderingAcrossMixedFilters() {
+    Instant from = Instant.parse("2026-04-06T13:23:58Z");
+    FilterSql sql = filterService.buildFilterSql(
+        List.of(
+            new FilterCriteria("field", "status", "null", null, null, null, null),
+            new FilterCriteria("text", null, null, null, "worker failed", null, null),
+            new FilterCriteria("timestamp", null, null, null, null, from, null),
+            new FilterCriteria("field", "details", "contains", "Auto-generated", null, null, null)
+        ),
+        "and"
+    );
+
+    assertEquals(
+        List.of("status", "status", "worker failed", from, "details", "details", "%Auto-generated%"),
+        sql.params()
+    );
+    assertTrue(sql.whereClause().contains("jsonb_exists(node.value, ?2)"));
+    assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?4)"));
+    assertTrue(sql.whereClause().contains("ts >= ?5"));
+    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?7)::text ILIKE ?8"));
+    assertTrue(sql.whereClause().contains(" AND "));
+  }
+
+  @Test
+  void normalizeFiltersOpDefaultsToAndWhenBlankOrUnknown() {
+    assertEquals("and", filterService.normalizeFiltersOp(null));
+    assertEquals("and", filterService.normalizeFiltersOp(" "));
+    assertEquals("and", filterService.normalizeFiltersOp("xor"));
+  }
+
+  @Test
+  void normalizeFiltersOpAcceptsOrCaseInsensitively() {
+    assertEquals("or", filterService.normalizeFiltersOp("or"));
+    assertEquals("or", filterService.normalizeFiltersOp("OR"));
   }
 
   private FilterCriteria normalizeTimestampFilter(String from, String to) {
