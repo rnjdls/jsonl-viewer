@@ -8,6 +8,7 @@ import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntry;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import jakarta.persistence.EntityManager;
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class JsonlIngestService {
   private static final Logger log = LoggerFactory.getLogger(JsonlIngestService.class);
+  private static final int INGEST_READ_BUFFER_SIZE = 16 * 1024;
 
   private final AppProperties properties;
   private final JsonlEntryRepository jsonlEntryRepository;
@@ -104,34 +106,55 @@ public class JsonlIngestService {
 
       long offset = state.getByteOffset();
       long lineNo = state.getLineNo();
+      long startLineNo = lineNo;
 
-      long fileSize = Files.size(path);
+      long targetSize = Files.size(path);
       if (forceReset) {
         jsonlEntryRepository.deleteByFilePath(filePath);
         offset = 0;
         lineNo = 0;
-      } else if (fileSize < offset) {
+        startLineNo = 0;
+      } else if (targetSize < offset) {
         log.info("File size shrank; resetting ingest state for {}", filePath);
         jsonlEntryRepository.deleteByFilePath(filePath);
         offset = 0;
         lineNo = 0;
+        startLineNo = 0;
       }
 
-      if (!ingestNow && fileSize == offset) {
+      if (!ingestNow && targetSize == offset) {
         return;
       }
 
+      long ingestStartNanos = System.nanoTime();
       List<JsonlEntry> batch = new ArrayList<>();
       ByteArrayOutputStream buffer = new ByteArrayOutputStream();
       long cursor = offset;
       long newOffset = offset;
+      long remaining = Math.max(0, targetSize - offset);
+      byte[] readBuffer = new byte[INGEST_READ_BUFFER_SIZE];
 
-      try (InputStream in = Files.newInputStream(path)) {
+      try (InputStream in = new BufferedInputStream(Files.newInputStream(path), INGEST_READ_BUFFER_SIZE)) {
         skipFully(in, offset);
-        int b;
-        while ((b = in.read()) != -1) {
-          cursor++;
-          if (b == '\n') {
+        while (remaining > 0) {
+          int bytesToRead = (int) Math.min(readBuffer.length, remaining);
+          int bytesRead = in.read(readBuffer, 0, bytesToRead);
+          if (bytesRead == -1) break;
+          if (bytesRead == 0) continue;
+
+          long chunkStartCursor = cursor;
+          cursor += bytesRead;
+          remaining -= bytesRead;
+
+          int segmentStart = 0;
+          for (int i = 0; i < bytesRead; i++) {
+            if (readBuffer[i] != '\n') continue;
+
+            int segmentLength = i - segmentStart;
+            if (segmentLength > 0) {
+              buffer.write(readBuffer, segmentStart, segmentLength);
+            }
+
             byte[] lineBytes = buffer.toByteArray();
             buffer.reset();
 
@@ -148,9 +171,12 @@ public class JsonlIngestService {
                 batch.clear();
               }
             }
-            newOffset = cursor;
-          } else {
-            buffer.write(b);
+            newOffset = chunkStartCursor + i + 1;
+            segmentStart = i + 1;
+          }
+
+          if (segmentStart < bytesRead) {
+            buffer.write(readBuffer, segmentStart, bytesRead - segmentStart);
           }
         }
       }
@@ -169,6 +195,20 @@ public class JsonlIngestService {
 
       if (newOffset != offset) {
         saveIngestState(filePath, newOffset, lineNo, Instant.now());
+        if (log.isDebugEnabled()) {
+          long elapsedMs = (System.nanoTime() - ingestStartNanos) / 1_000_000L;
+          long bytesIngested = newOffset - offset;
+          long linesIngested = lineNo - startLineNo;
+          log.debug(
+              "Ingest pass advanced state for {}: +{} bytes, +{} lines in {} ms ({} -> {})",
+              filePath,
+              bytesIngested,
+              linesIngested,
+              elapsedMs,
+              offset,
+              newOffset
+          );
+        }
       }
     } catch (Exception e) {
       log.warn("Ingest failed: {}", e.getMessage());
