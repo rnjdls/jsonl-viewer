@@ -1,4 +1,36 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  TIMEZONE_LOCAL,
+  coerceTimeZoneOrLocal,
+  formatDateTimeTooltip,
+  formatTime,
+} from "../../utils/datetime";
 import "./TopBar.css";
+
+const FALLBACK_TIME_ZONES = [
+  "America/New_York",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Berlin",
+  "Asia/Manila",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+function getSelectableTimeZones() {
+  if (typeof Intl.supportedValuesOf === "function") {
+    try {
+      const supported = Intl.supportedValuesOf("timeZone");
+      if (Array.isArray(supported) && supported.length > 0) {
+        return supported;
+      }
+    } catch {
+      // Fall through to fallback list.
+    }
+  }
+  return FALLBACK_TIME_ZONES;
+}
 
 /**
  * Sticky application header.
@@ -18,6 +50,8 @@ import "./TopBar.css";
  *   onReset: () => void,
  *   resetLoading: boolean,
  *   reloadLoading: boolean,
+ *   timeZone: string,
+ *   onTimeZoneChange: (timeZone: string) => void,
  * }} props
  */
 export function TopBar({
@@ -33,7 +67,41 @@ export function TopBar({
   onReset,
   resetLoading,
   reloadLoading,
+  timeZone,
+  onTimeZoneChange,
 }) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  const resolvedLocalTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "System",
+    []
+  );
+
+  const selectedTimeZone = coerceTimeZoneOrLocal(timeZone);
+
+  const timeZoneOptions = useMemo(() => {
+    const normalized = [...new Set(getSelectableTimeZones())].sort((left, right) =>
+      left.localeCompare(right)
+    );
+    const withoutUtc = normalized.filter((tz) => tz !== "UTC");
+    return [
+      { value: TIMEZONE_LOCAL, label: `Local (${resolvedLocalTimeZone})` },
+      { value: "UTC", label: "UTC" },
+      ...withoutUtc.map((tz) => ({ value: tz, label: tz })),
+    ];
+  }, [resolvedLocalTimeZone]);
+
+  const handleTimeZoneSelectChange = (event) => {
+    onTimeZoneChange(event.target.value);
+  };
+
   return (
     <header className="topbar">
       <span className="topbar-logo">
@@ -86,10 +154,31 @@ export function TopBar({
           search <strong>{searchStatus}</strong>
         </span>
         {lastIngestedAt && (
-          <span className="topbar-chip">
-            updated <strong>{new Date(lastIngestedAt).toLocaleTimeString()}</strong>
+          <span
+            className="topbar-chip"
+            title={formatDateTimeTooltip(lastIngestedAt, selectedTimeZone)}
+          >
+            updated <strong>{formatTime(lastIngestedAt, selectedTimeZone)}</strong>
           </span>
         )}
+        <span className="topbar-chip" title={formatDateTimeTooltip(now, selectedTimeZone)}>
+          now <strong>{formatTime(now, selectedTimeZone)}</strong>
+        </span>
+        <span className="topbar-chip topbar-chip--tz">
+          tz
+          <select
+            className="topbar-chip-select"
+            value={selectedTimeZone}
+            onChange={handleTimeZoneSelectChange}
+            aria-label="Timezone"
+          >
+            {timeZoneOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </span>
       </div>
     </header>
   );
