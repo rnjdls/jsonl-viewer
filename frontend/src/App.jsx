@@ -581,7 +581,6 @@ export default function App() {
         totalCount={stats?.totalCount ?? 0}
         parsedCount={stats?.parsedCount ?? 0}
         errorCount={stats?.errorCount ?? 0}
-        sourceRevision={stats?.sourceRevision ?? 0}
         searchStatus={stats?.searchStatus || "ready"}
         ingestPaused={Boolean(stats?.ingestPaused)}
         onReload={handleReload}
