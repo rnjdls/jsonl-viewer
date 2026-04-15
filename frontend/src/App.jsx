@@ -33,6 +33,28 @@ const DEFAULT_PREVIEW_LIMIT = 10;
 const DEFAULT_SORT_BY = "timestamp";
 const DEFAULT_SORT_DIR = "desc";
 const LOCAL_STORAGE_TIMEZONE_KEY = "jsonlLive.timeZone";
+const ADMIN_ACTION = {
+  RELOAD: "reload",
+  RESET: "reset",
+};
+const ADMIN_ACTION_META = {
+  [ADMIN_ACTION.RELOAD]: {
+    title: "Reload File",
+    description: "Current rows will be cleared and the source will be reloaded from the beginning.",
+    confirmLabel: "Yes, Reload",
+    loadingLabel: "Reloading source...",
+    errorMessage: "Failed to reload data.",
+    run: reloadData,
+  },
+  [ADMIN_ACTION.RESET]: {
+    title: "Delete All",
+    description: "Current rows will be removed and the source position will move to the end/newest point.",
+    confirmLabel: "Yes, Delete All",
+    loadingLabel: "Deleting rows...",
+    errorMessage: "Failed to reset data.",
+    run: resetData,
+  },
+};
 
 function getCopyLabel(copyStatus) {
   if (copyStatus === "copying") return "Copying...";
@@ -102,10 +124,11 @@ export default function App() {
   const [jsonTreeExpandTokenById, setJsonTreeExpandTokenById] = useState({});
   const [error, setError] = useState("");
   const [actionState, setActionState] = useState({
-    reset: false,
-    reload: false,
     pauseToggle: false,
   });
+  const [adminActionConfirming, setAdminActionConfirming] = useState(null);
+  const [adminActionExecuting, setAdminActionExecuting] = useState(null);
+  const [uiLocked, setUiLocked] = useState(false);
   const [timeZone, setTimeZone] = useState(() => {
     try {
       const persistedTimeZone = window.localStorage.getItem(LOCAL_STORAGE_TIMEZONE_KEY);
@@ -181,6 +204,24 @@ export default function App() {
       // Ignore blocked or unavailable localStorage.
     }
   }, [timeZone]);
+
+  useEffect(() => {
+    if (!adminActionConfirming) {
+      return;
+    }
+
+    const handleWindowKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setAdminActionConfirming(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [adminActionConfirming]);
 
   const activeFilterPayload = useMemo(
     () => toFilterPayload(activeFilters, filtersOp),
@@ -287,10 +328,11 @@ export default function App() {
   }, [filterPayload, pendingCountRequestHash, refreshCounts, stats?.filePath, stats?.sourceRevision]);
 
   const handleSearch = useCallback(async () => {
+    if (uiLocked) return;
     applyFilters();
     resetPreviewState();
     await refreshCounts(activeFilterPayload);
-  }, [activeFilterPayload, applyFilters, refreshCounts, resetPreviewState]);
+  }, [activeFilterPayload, applyFilters, refreshCounts, resetPreviewState, uiLocked]);
 
   const requestPreviewPage = useCallback(
     async (cursor) =>
@@ -338,23 +380,24 @@ export default function App() {
   );
 
   const handleLoadPreview = useCallback(async () => {
+    if (uiLocked) return;
     await fetchPreviewPage(null, 0);
-  }, [fetchPreviewPage]);
+  }, [fetchPreviewPage, uiLocked]);
 
   const handleNextPage = useCallback(async () => {
-    if (!previewActive || !nextCursor) return;
+    if (uiLocked || !previewActive || !nextCursor) return;
     await fetchPreviewPage(nextCursor, pageIndex + 1);
-  }, [fetchPreviewPage, nextCursor, pageIndex, previewActive]);
+  }, [fetchPreviewPage, nextCursor, pageIndex, previewActive, uiLocked]);
 
   const handlePrevPage = useCallback(async () => {
-    if (!previewActive || pageIndex === 0) return;
+    if (uiLocked || !previewActive || pageIndex === 0) return;
     const prevCursor = cursorHistory[pageIndex - 1] ?? null;
     await fetchPreviewPage(prevCursor, pageIndex - 1);
-  }, [cursorHistory, fetchPreviewPage, pageIndex, previewActive]);
+  }, [cursorHistory, fetchPreviewPage, pageIndex, previewActive, uiLocked]);
 
   const handlePageSelectChange = useCallback(
     async (event) => {
-      if (!previewActive) return;
+      if (uiLocked || !previewActive) return;
       const requestedPage = Number.parseInt(event.target.value, 10);
       if (Number.isNaN(requestedPage) || requestedPage < 1) return;
 
@@ -382,39 +425,43 @@ export default function App() {
 
       await fetchPreviewPage(targetCursor ?? null, targetPageIndex, workingHistory);
     },
-    [cursorHistory, fetchPreviewPage, pageIndex, previewActive, requestPreviewPage]
+    [cursorHistory, fetchPreviewPage, pageIndex, previewActive, requestPreviewPage, uiLocked]
   );
 
   const handleSortByChange = useCallback(
     (event) => {
+      if (uiLocked) return;
       const nextSortBy = event.target.value;
       setPreviewSortBy(nextSortBy);
       resetPreviewState();
     },
-    [resetPreviewState]
+    [resetPreviewState, uiLocked]
   );
 
   const handleSortDirChange = useCallback(
     (event) => {
+      if (uiLocked) return;
       const nextSortDir = event.target.value;
       setPreviewSortDir(nextSortDir);
       resetPreviewState();
     },
-    [resetPreviewState]
+    [resetPreviewState, uiLocked]
   );
 
   const handlePreviewLimitChange = useCallback(
     (event) => {
+      if (uiLocked) return;
       const nextLimit = Number.parseInt(event.target.value, 10);
       if (Number.isNaN(nextLimit)) return;
       setPreviewLimit(nextLimit);
       resetPreviewState();
     },
-    [resetPreviewState]
+    [resetPreviewState, uiLocked]
   );
 
   const handleLoadBody = useCallback(
     async (id) => {
+      if (uiLocked) return;
       if (entryDetailsById[id] || entryDetailsLoadingById[id]) {
         setExpandedById((prev) => ({ ...prev, [id]: true }));
         return;
@@ -431,10 +478,11 @@ export default function App() {
         setEntryDetailsLoadingById((prev) => ({ ...prev, [id]: false }));
       }
     },
-    [entryDetailsById, entryDetailsLoadingById]
+    [entryDetailsById, entryDetailsLoadingById, uiLocked]
   );
 
   const handleCollapseBody = useCallback((id) => {
+    if (uiLocked) return;
     setExpandedById((prev) => ({ ...prev, [id]: false }));
     setJsonTreeExpandTokenById((prev) => {
       if (!(id in prev)) return prev;
@@ -442,17 +490,19 @@ export default function App() {
       delete next[id];
       return next;
     });
-  }, []);
+  }, [uiLocked]);
 
   const handleExpandAllJsonTree = useCallback((id) => {
+    if (uiLocked) return;
     setJsonTreeExpandTokenById((prev) => ({
       ...prev,
       [id]: (prev[id] ?? 0) + 1,
     }));
-  }, []);
+  }, [uiLocked]);
 
   const handleLoadFullRaw = useCallback(
     async (id) => {
+      if (uiLocked) return;
       if (entryRawById[id] || entryRawLoadingById[id]) return;
       setEntryRawLoadingById((prev) => ({ ...prev, [id]: true }));
       try {
@@ -465,11 +515,12 @@ export default function App() {
         setEntryRawLoadingById((prev) => ({ ...prev, [id]: false }));
       }
     },
-    [entryRawById, entryRawLoadingById]
+    [entryRawById, entryRawLoadingById, uiLocked]
   );
 
   const handleCopyRawLine = useCallback(
     async (id) => {
+      if (uiLocked) return;
       if (copyInFlightByIdRef.current[id]) return;
 
       copyInFlightByIdRef.current[id] = true;
@@ -498,38 +549,47 @@ export default function App() {
         copyInFlightByIdRef.current[id] = false;
       }
     },
-    [clearCopyResetTimer, entryRawById]
+    [clearCopyResetTimer, entryRawById, uiLocked]
   );
 
-  const handleReset = useCallback(async () => {
-    setActionState((prev) => ({ ...prev, reset: true }));
-    try {
-      await resetData();
-      await refreshStats();
-      await refreshCounts(filterPayload);
-      resetPreviewState();
-    } catch (err) {
-      setError(err.message || "Failed to reset data.");
-    } finally {
-      setActionState((prev) => ({ ...prev, reset: false }));
-    }
-  }, [filterPayload, refreshCounts, refreshStats, resetPreviewState]);
+  const handleRequestAdminAction = useCallback(
+    (action) => {
+      if (uiLocked || !ADMIN_ACTION_META[action]) return;
+      setAdminActionConfirming(action);
+    },
+    [uiLocked]
+  );
 
-  const handleReload = useCallback(async () => {
-    setActionState((prev) => ({ ...prev, reload: true }));
+  const handleCancelAdminActionConfirmation = useCallback(() => {
+    if (uiLocked) return;
+    setAdminActionConfirming(null);
+  }, [uiLocked]);
+
+  const handleConfirmAdminAction = useCallback(async () => {
+    if (!adminActionConfirming || uiLocked) return;
+    const actionMeta = ADMIN_ACTION_META[adminActionConfirming];
+    if (!actionMeta) return;
+
+    setAdminActionConfirming(null);
+    setAdminActionExecuting(adminActionConfirming);
+    setUiLocked(true);
+
     try {
-      await reloadData();
+      await actionMeta.run();
       await refreshStats();
       await refreshCounts(filterPayload);
       resetPreviewState();
+      setError("");
     } catch (err) {
-      setError(err.message || "Failed to reload data.");
+      setError(err.message || actionMeta.errorMessage);
     } finally {
-      setActionState((prev) => ({ ...prev, reload: false }));
+      setAdminActionExecuting(null);
+      setUiLocked(false);
     }
-  }, [filterPayload, refreshCounts, refreshStats, resetPreviewState]);
+  }, [adminActionConfirming, filterPayload, refreshCounts, refreshStats, resetPreviewState, uiLocked]);
 
   const handlePauseToggle = useCallback(async () => {
+    if (uiLocked) return;
     setActionState((prev) => ({ ...prev, pauseToggle: true }));
     try {
       if (stats?.ingestPaused) {
@@ -544,12 +604,19 @@ export default function App() {
     } finally {
       setActionState((prev) => ({ ...prev, pauseToggle: false }));
     }
-  }, [refreshStats, stats?.ingestPaused]);
+  }, [refreshStats, stats?.ingestPaused, uiLocked]);
 
   const handleTimeZoneChange = useCallback((nextTimeZone) => {
+    if (uiLocked) return;
     setTimeZone(coerceTimeZoneOrLocal(nextTimeZone));
-  }, []);
+  }, [uiLocked]);
 
+  const confirmingAdminActionMeta = adminActionConfirming
+    ? ADMIN_ACTION_META[adminActionConfirming]
+    : null;
+  const executingAdminActionMeta = adminActionExecuting
+    ? ADMIN_ACTION_META[adminActionExecuting]
+    : null;
   const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
   const exactMatchReady =
     counts?.status === "ready"
@@ -574,7 +641,7 @@ export default function App() {
           : null;
 
   return (
-    <div className="app">
+    <div className={`app ${uiLocked ? "app--busy" : ""}`} aria-busy={uiLocked}>
       <TopBar
         filePath={stats?.filePath}
         lastIngestedAt={stats?.lastIngestedAt}
@@ -583,12 +650,13 @@ export default function App() {
         errorCount={stats?.errorCount ?? 0}
         searchStatus={stats?.searchStatus || "ready"}
         ingestPaused={Boolean(stats?.ingestPaused)}
-        onReload={handleReload}
-        onReset={handleReset}
+        onReload={() => handleRequestAdminAction(ADMIN_ACTION.RELOAD)}
+        onReset={() => handleRequestAdminAction(ADMIN_ACTION.RESET)}
         onPauseToggle={handlePauseToggle}
-        resetLoading={actionState.reset}
-        reloadLoading={actionState.reload}
+        resetLoading={adminActionExecuting === ADMIN_ACTION.RESET}
+        reloadLoading={adminActionExecuting === ADMIN_ACTION.RELOAD}
         pauseToggleLoading={actionState.pauseToggle}
+        globalLocked={uiLocked}
         timeZone={timeZone}
         onTimeZoneChange={handleTimeZoneChange}
       />
@@ -604,6 +672,7 @@ export default function App() {
         filtersOp={filtersOp}
         loading={countsLoading}
         countStatus={counts?.status || "ready"}
+        globalDisabled={uiLocked}
         onAddFieldFilter={addFieldFilter}
         onAddTextFilter={addTextFilter}
         onAddTimestampFilter={addTimestampFilter}
@@ -639,7 +708,7 @@ export default function App() {
                     className="preview-select"
                     value={previewLimit}
                     onChange={handlePreviewLimitChange}
-                    disabled={previewLoading}
+                    disabled={uiLocked || previewLoading}
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -655,7 +724,7 @@ export default function App() {
                     className="preview-select"
                     value={previewSortBy}
                     onChange={handleSortByChange}
-                    disabled={previewLoading}
+                    disabled={uiLocked || previewLoading}
                   >
                     <option value="timestamp">Timestamp</option>
                     <option value="lineNo">Line</option>
@@ -668,7 +737,7 @@ export default function App() {
                     className="preview-select"
                     value={previewSortDir}
                     onChange={handleSortDirChange}
-                    disabled={previewLoading}
+                    disabled={uiLocked || previewLoading}
                   >
                     <option value="asc">Asc</option>
                     <option value="desc">Desc</option>
@@ -679,7 +748,7 @@ export default function App() {
                 <button
                   className="preview-btn"
                   onClick={handleLoadPreview}
-                  disabled={previewLoading || (exactMatchReady && matchCount === 0)}
+                  disabled={uiLocked || previewLoading || (exactMatchReady && matchCount === 0)}
                 >
                   {previewActive ? "Reload Preview" : "Load Preview"}
                 </button>
@@ -690,7 +759,7 @@ export default function App() {
                       className="preview-select"
                       value={selectedPage}
                       onChange={handlePageSelectChange}
-                      disabled={previewLoading || totalPages <= 1}
+                      disabled={uiLocked || previewLoading || totalPages <= 1}
                     >
                       {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNo) => (
                         <option key={`page-${pageNo}`} value={pageNo}>
@@ -705,7 +774,7 @@ export default function App() {
                   <button
                     className="preview-btn preview-btn--secondary"
                     onClick={handlePrevPage}
-                    disabled={previewLoading || !canGoPrev}
+                    disabled={uiLocked || previewLoading || !canGoPrev}
                   >
                     Prev
                   </button>
@@ -714,7 +783,7 @@ export default function App() {
                   <button
                     className="preview-btn preview-btn--secondary"
                     onClick={handleNextPage}
-                    disabled={previewLoading || !canGoNext}
+                    disabled={uiLocked || previewLoading || !canGoNext}
                   >
                     Next
                   </button>
@@ -757,7 +826,8 @@ export default function App() {
                   onExpandAll={() => handleExpandAllJsonTree(row.id)}
                   onCopy={() => handleCopyRawLine(row.id)}
                   copyLabel={getCopyLabel(copyStatus)}
-                  copyDisabled={copyStatus === "copying"}
+                  copyDisabled={uiLocked || copyStatus === "copying"}
+                  globalDisabled={uiLocked}
                   expandAllToken={jsonTreeExpandTokenById[row.id] ?? 0}
                 />
               );
@@ -769,6 +839,51 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {confirmingAdminActionMeta && (
+        <div className="admin-confirm-backdrop" role="presentation">
+          <div
+            className="admin-confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-confirm-title"
+            aria-describedby="admin-confirm-description"
+          >
+            <h2 id="admin-confirm-title" className="admin-confirm-title">
+              {confirmingAdminActionMeta.title}
+            </h2>
+            <p id="admin-confirm-description" className="admin-confirm-description">
+              {confirmingAdminActionMeta.description}
+            </p>
+            <div className="admin-confirm-actions">
+              <button
+                type="button"
+                className="admin-confirm-btn admin-confirm-btn--secondary"
+                onClick={handleCancelAdminActionConfirmation}
+                autoFocus
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-confirm-btn admin-confirm-btn--primary"
+                onClick={handleConfirmAdminAction}
+              >
+                {confirmingAdminActionMeta.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uiLocked && executingAdminActionMeta && (
+        <div className="admin-loading-overlay" role="status" aria-live="polite">
+          <div className="admin-loading-card">
+            <div className="admin-loading-spinner" aria-hidden="true" />
+            <p className="admin-loading-text">{executingAdminActionMeta.loadingLabel}</p>
+          </div>
+        </div>
+      )}
 
       <footer className="app-footer">
         <span>JSONL Live Viewer</span>

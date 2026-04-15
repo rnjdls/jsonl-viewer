@@ -46,6 +46,11 @@
   color: #fff;
 }
 
+.sb-add-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .sb-add-btn--ts {
   border-color: var(--yellow);
   color: var(--yellow);
@@ -121,6 +126,11 @@
 .sb-clear-all:hover {
   border-color: var(--warn);
   color: var(--warn);
+}
+
+.sb-clear-all:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .sb-search-btn {
@@ -282,4 +292,9 @@
 .sb-remove:hover {
   border-color: var(--warn);
   color: var(--warn);
+}
+
+.sb-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

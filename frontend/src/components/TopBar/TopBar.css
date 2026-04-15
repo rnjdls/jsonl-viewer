@@ -155,6 +155,11 @@
   color: var(--accent2);
 }
 
+.topbar-menu-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .topbar-menu-trigger[aria-expanded="true"] {
   border-color: var(--accent2);
   color: var(--accent2);
@@ -290,4 +295,9 @@
   outline: none;
   border-color: var(--accent2);
   box-shadow: 0 0 0 1px rgba(77, 159, 255, 0.45);
+}
+
+.topbar-chip-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
