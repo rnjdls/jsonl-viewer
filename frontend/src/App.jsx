@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useJsonlSearch } from "./hooks/useJsonlSearch";
 
 import { TopBar } from "./components/TopBar/TopBar";
@@ -16,6 +16,7 @@ import {
   reloadData,
   resetData,
 } from "./utils/api";
+import { copyText } from "./utils/clipboard";
 import { FIELD_FILTER_OP } from "./constants";
 
 import "./App.css";
@@ -23,6 +24,12 @@ import "./App.css";
 const DEFAULT_PREVIEW_LIMIT = 10;
 const DEFAULT_SORT_BY = "timestamp";
 const DEFAULT_SORT_DIR = "desc";
+
+function getCopyLabel(copyStatus) {
+  if (copyStatus === "copying") return "Copying...";
+  if (copyStatus === "copied") return "Copied";
+  return "Copy";
+}
 
 function toTimestampPayload(value) {
   const trimmed = (value ?? "").trim();
@@ -81,9 +88,27 @@ export default function App() {
   const [entryDetailsLoadingById, setEntryDetailsLoadingById] = useState({});
   const [entryRawById, setEntryRawById] = useState({});
   const [entryRawLoadingById, setEntryRawLoadingById] = useState({});
+  const [entryCopyStatusById, setEntryCopyStatusById] = useState({});
   const [expandedById, setExpandedById] = useState({});
   const [error, setError] = useState("");
   const [actionState, setActionState] = useState({ reset: false, reload: false });
+  const copyResetTimersRef = useRef({});
+  const copyInFlightByIdRef = useRef({});
+
+  const clearAllCopyResetTimers = useCallback(() => {
+    Object.values(copyResetTimersRef.current).forEach((timerId) => {
+      clearTimeout(timerId);
+    });
+    copyResetTimersRef.current = {};
+  }, []);
+
+  const clearCopyResetTimer = useCallback((id) => {
+    const timerId = copyResetTimersRef.current[id];
+    if (timerId !== undefined) {
+      clearTimeout(timerId);
+      delete copyResetTimersRef.current[id];
+    }
+  }, []);
 
   const {
     filters,
@@ -104,6 +129,7 @@ export default function App() {
   } = useJsonlSearch([], { timestampField: stats?.timestampField });
 
   const resetPreviewState = useCallback(() => {
+    clearAllCopyResetTimers();
     setPreviewRows([]);
     setCursorHistory([null]);
     setPageIndex(0);
@@ -113,8 +139,17 @@ export default function App() {
     setEntryDetailsLoadingById({});
     setEntryRawById({});
     setEntryRawLoadingById({});
+    setEntryCopyStatusById({});
     setExpandedById({});
-  }, []);
+    copyInFlightByIdRef.current = {};
+  }, [clearAllCopyResetTimers]);
+
+  useEffect(
+    () => () => {
+      clearAllCopyResetTimers();
+    },
+    [clearAllCopyResetTimers]
+  );
 
   const activeFilterPayload = useMemo(
     () => toFilterPayload(activeFilters, filtersOp),
@@ -389,6 +424,39 @@ export default function App() {
     [entryRawById, entryRawLoadingById]
   );
 
+  const handleCopyRawLine = useCallback(
+    async (id) => {
+      if (copyInFlightByIdRef.current[id]) return;
+
+      copyInFlightByIdRef.current[id] = true;
+      setEntryCopyStatusById((prev) => ({ ...prev, [id]: "copying" }));
+
+      try {
+        const cachedRaw = entryRawById[id];
+        const rawLine = cachedRaw ?? (await getEntryRaw(id));
+
+        if (cachedRaw === undefined) {
+          setEntryRawById((prev) => ({ ...prev, [id]: rawLine }));
+        }
+
+        await copyText(rawLine ?? "");
+        clearCopyResetTimer(id);
+        setEntryCopyStatusById((prev) => ({ ...prev, [id]: "copied" }));
+        copyResetTimersRef.current[id] = window.setTimeout(() => {
+          setEntryCopyStatusById((prev) => ({ ...prev, [id]: "idle" }));
+          clearCopyResetTimer(id);
+        }, 1200);
+        setError("");
+      } catch (err) {
+        setEntryCopyStatusById((prev) => ({ ...prev, [id]: "idle" }));
+        setError(err.message || "Failed to copy raw line.");
+      } finally {
+        copyInFlightByIdRef.current[id] = false;
+      }
+    },
+    [clearCopyResetTimer, entryRawById]
+  );
+
   const handleReset = useCallback(async () => {
     setActionState((prev) => ({ ...prev, reset: true }));
     try {
@@ -605,20 +673,26 @@ export default function App() {
               <div className="preview-empty">No preview rows available.</div>
             )}
 
-            {previewRows.map((row) => (
-              <JsonCard
-                key={row.id}
-                row={row}
-                expanded={Boolean(expandedById[row.id])}
-                body={entryDetailsById[row.id]}
-                fullRaw={entryRawById[row.id]}
-                loadingBody={Boolean(entryDetailsLoadingById[row.id])}
-                loadingRaw={Boolean(entryRawLoadingById[row.id])}
-                onLoadBody={() => handleLoadBody(row.id)}
-                onLoadRaw={() => handleLoadFullRaw(row.id)}
-                onCollapse={() => handleCollapseBody(row.id)}
-              />
-            ))}
+            {previewRows.map((row) => {
+              const copyStatus = entryCopyStatusById[row.id] ?? "idle";
+              return (
+                <JsonCard
+                  key={row.id}
+                  row={row}
+                  expanded={Boolean(expandedById[row.id])}
+                  body={entryDetailsById[row.id]}
+                  fullRaw={entryRawById[row.id]}
+                  loadingBody={Boolean(entryDetailsLoadingById[row.id])}
+                  loadingRaw={Boolean(entryRawLoadingById[row.id])}
+                  onLoadBody={() => handleLoadBody(row.id)}
+                  onLoadRaw={() => handleLoadFullRaw(row.id)}
+                  onCollapse={() => handleCollapseBody(row.id)}
+                  onCopy={() => handleCopyRawLine(row.id)}
+                  copyLabel={getCopyLabel(copyStatus)}
+                  copyDisabled={copyStatus === "copying"}
+                />
+              );
+            })}
 
             {previewLoading && (
               <div className="preview-loading">Loading preview...</div>
