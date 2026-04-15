@@ -6,7 +6,7 @@ Create a distribution zip of this repo **without**:
 - `docs/`
 - `skills/`
 - `docker-compose.generated.yml`
-- `AGENT.md`
+- `AGENTS.md`
 - `SKILLS.md`
 - Git-related files (e.g. `.git/`, `.gitignore`, `.gitattributes`, `.gitmodules`, `.github/`)
 
@@ -15,7 +15,7 @@ Create a distribution zip of this repo **without**:
 From the repo root:
 
 ```bash
-bash skills/package-dist-zip/scripts/package_dist_zip.sh
+bash docs/skills/package-dist-zip/scripts/package_dist_zip.sh
 ```
 
 ## Output
