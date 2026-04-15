@@ -76,3 +76,11 @@ export function resetData() {
 export function reloadData() {
   return apiFetch("/admin/reload", { method: "POST" });
 }
+
+export function pauseIngestion() {
+  return apiFetch("/admin/pause", { method: "POST" });
+}
+
+export function resumeIngestion() {
+  return apiFetch("/admin/resume", { method: "POST" });
+}

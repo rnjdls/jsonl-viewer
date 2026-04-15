@@ -10,6 +10,7 @@ import com.jsonl.viewer.api.dto.StatsResponse;
 import com.jsonl.viewer.config.AppProperties;
 import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.ingest.IngestAdminService;
+import com.jsonl.viewer.ingest.IngestPauseState;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntryDetailRow;
@@ -50,6 +51,7 @@ public class JsonlController {
   private final FilterRequestHasher filterRequestHasher;
   private final FilterCountCacheService filterCountCacheService;
   private final IngestAdminService ingestAdminService;
+  private final IngestPauseState ingestPauseState;
   private final PreviewCursorCodec previewCursorCodec;
 
   public JsonlController(
@@ -61,6 +63,7 @@ public class JsonlController {
       FilterRequestHasher filterRequestHasher,
       FilterCountCacheService filterCountCacheService,
       IngestAdminService ingestAdminService,
+      IngestPauseState ingestPauseState,
       PreviewCursorCodec previewCursorCodec
   ) {
     this.properties = properties;
@@ -71,6 +74,7 @@ public class JsonlController {
     this.filterRequestHasher = filterRequestHasher;
     this.filterCountCacheService = filterCountCacheService;
     this.ingestAdminService = ingestAdminService;
+    this.ingestPauseState = ingestPauseState;
     this.previewCursorCodec = previewCursorCodec;
   }
 
@@ -78,7 +82,17 @@ public class JsonlController {
   public StatsResponse stats() {
     String sourceId = sourceResolver.getActiveSourceId();
     if (sourceId == null) {
-      return new StatsResponse(null, properties.getJsonlTimestampField(), 0, 0, 0, null, 0, "ready");
+      return new StatsResponse(
+          null,
+          properties.getJsonlTimestampField(),
+          0,
+          0,
+          0,
+          null,
+          0,
+          "ready",
+          ingestPauseState.isPaused()
+      );
     }
 
     IngestState state = ingestStateRepository.findById(sourceId)
@@ -92,7 +106,8 @@ public class JsonlController {
         state.getErrorCount(),
         state.getLastIngestedAt(),
         state.getSourceRevision(),
-        computeSearchStatus(state)
+        computeSearchStatus(state),
+        ingestPauseState.isPaused()
     );
   }
 
@@ -252,6 +267,18 @@ public class JsonlController {
   @PostMapping("/admin/reload")
   public Map<String, String> reload() {
     ingestAdminService.reload();
+    return Map.of("status", "ok");
+  }
+
+  @PostMapping("/admin/pause")
+  public Map<String, String> pause() {
+    ingestAdminService.pause();
+    return Map.of("status", "ok");
+  }
+
+  @PostMapping("/admin/resume")
+  public Map<String, String> resume() {
+    ingestAdminService.resume();
     return Map.of("status", "ok");
   }
 

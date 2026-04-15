@@ -9,6 +9,7 @@ import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.config.AppProperties;
 import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.ingest.IngestAdminService;
+import com.jsonl.viewer.ingest.IngestPauseState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.PreviewCursor;
@@ -50,6 +51,7 @@ class JsonlControllerPreviewTest {
         filterRequestHasher,
         filterCountCacheService,
         new NoopIngestAdminService(),
+        new IngestPauseState(),
         codec
     );
 
@@ -113,5 +115,11 @@ class JsonlControllerPreviewTest {
 
     @Override
     public void reload() {}
+
+    @Override
+    public void pause() {}
+
+    @Override
+    public void resume() {}
   }
 }

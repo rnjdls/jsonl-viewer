@@ -9,15 +9,18 @@ public class ModeAwareIngestAdminService implements IngestAdminService {
   private final IngestSourceResolver sourceResolver;
   private final JsonlIngestService fileIngestService;
   private final ObjectProvider<KafkaIngestService> kafkaIngestServiceProvider;
+  private final IngestPauseState pauseState;
 
   public ModeAwareIngestAdminService(
       IngestSourceResolver sourceResolver,
       JsonlIngestService fileIngestService,
-      ObjectProvider<KafkaIngestService> kafkaIngestServiceProvider
+      ObjectProvider<KafkaIngestService> kafkaIngestServiceProvider,
+      IngestPauseState pauseState
   ) {
     this.sourceResolver = sourceResolver;
     this.fileIngestService = fileIngestService;
     this.kafkaIngestServiceProvider = kafkaIngestServiceProvider;
+    this.pauseState = pauseState;
   }
 
   @Override
@@ -36,6 +39,22 @@ public class ModeAwareIngestAdminService implements IngestAdminService {
       return;
     }
     requireKafkaIngestService().reloadFromBeginning();
+  }
+
+  @Override
+  public void pause() {
+    pauseState.pause();
+    if (!sourceResolver.isFileMode()) {
+      requireKafkaIngestService().pauseListener();
+    }
+  }
+
+  @Override
+  public void resume() {
+    pauseState.resume();
+    if (!sourceResolver.isFileMode()) {
+      requireKafkaIngestService().resumeListener();
+    }
   }
 
   private KafkaIngestService requireKafkaIngestService() {

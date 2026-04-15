@@ -46,10 +46,13 @@ function getSelectableTimeZones() {
  *   timestampField: string | null,
  *   sourceRevision: number,
  *   searchStatus: string,
+ *   ingestPaused: boolean,
  *   onReload: () => void,
  *   onReset: () => void,
+ *   onPauseToggle: () => void,
  *   resetLoading: boolean,
  *   reloadLoading: boolean,
+ *   pauseToggleLoading: boolean,
  *   timeZone: string,
  *   onTimeZoneChange: (timeZone: string) => void,
  * }} props
@@ -63,10 +66,13 @@ export function TopBar({
   timestampField,
   sourceRevision,
   searchStatus,
+  ingestPaused,
   onReload,
   onReset,
+  onPauseToggle,
   resetLoading,
   reloadLoading,
+  pauseToggleLoading,
   timeZone,
   onTimeZoneChange,
 }) {
@@ -124,6 +130,13 @@ export function TopBar({
           {reloadLoading ? "Reloading..." : "Reload File"}
         </button>
         <button
+          className={`topbar-btn ${ingestPaused ? "topbar-btn--resume" : "topbar-btn--pause"}`}
+          onClick={onPauseToggle}
+          disabled={!filePath || pauseToggleLoading}
+        >
+          {pauseToggleLoading ? "Working..." : ingestPaused ? "Resume" : "Pause"}
+        </button>
+        <button
           className="topbar-btn topbar-btn--reset"
           onClick={onReset}
           disabled={!filePath || resetLoading}
@@ -152,6 +165,9 @@ export function TopBar({
         </span>
         <span className="topbar-chip">
           search <strong>{searchStatus}</strong>
+        </span>
+        <span className={`topbar-chip ${ingestPaused ? "topbar-chip--paused" : "topbar-chip--running"}`}>
+          ingest <strong>{ingestPaused ? "paused" : "running"}</strong>
         </span>
         {lastIngestedAt && (
           <span

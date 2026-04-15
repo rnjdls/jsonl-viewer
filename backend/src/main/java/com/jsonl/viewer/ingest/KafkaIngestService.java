@@ -43,6 +43,7 @@ public class KafkaIngestService {
   private final IngestSourceResolver sourceResolver;
   private final JsonlEntryRepository jsonlEntryRepository;
   private final IngestStateRepository ingestStateRepository;
+  private final IngestPauseState pauseState;
   private final JsonlEntryParser jsonlEntryParser;
   private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
   private final EntityManager entityManager;
@@ -54,6 +55,7 @@ public class KafkaIngestService {
       IngestSourceResolver sourceResolver,
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
+      IngestPauseState pauseState,
       JsonlEntryParser jsonlEntryParser,
       JsonFieldIndexExtractor jsonFieldIndexExtractor,
       EntityManager entityManager,
@@ -64,6 +66,7 @@ public class KafkaIngestService {
     this.sourceResolver = sourceResolver;
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
+    this.pauseState = pauseState;
     this.jsonlEntryParser = jsonlEntryParser;
     this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
     this.entityManager = entityManager;
@@ -148,6 +151,18 @@ public class KafkaIngestService {
     resetKafkaSource(false);
   }
 
+  public void pauseListener() {
+    MessageListenerContainer container = listenerRegistry.getListenerContainer(LISTENER_ID);
+    stopContainer(container);
+  }
+
+  public void resumeListener() {
+    MessageListenerContainer container = listenerRegistry.getListenerContainer(LISTENER_ID);
+    if (container != null && !container.isRunning()) {
+      container.start();
+    }
+  }
+
   private void resetKafkaSource(boolean seekToEnd) {
     String sourceId = sourceResolver.getActiveSourceId();
     AppProperties.Kafka kafka = properties.getKafka();
@@ -176,7 +191,7 @@ public class KafkaIngestService {
       state.setIngestStatus("ready");
       ingestStateRepository.save(state);
     } finally {
-      if (restartContainer && container != null) {
+      if (restartContainer && container != null && !pauseState.isPaused()) {
         container.start();
       }
     }

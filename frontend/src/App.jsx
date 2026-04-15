@@ -13,7 +13,9 @@ import {
   getEntryRaw,
   getPreview,
   getStats,
+  pauseIngestion,
   reloadData,
+  resumeIngestion,
   resetData,
 } from "./utils/api";
 import { copyText } from "./utils/clipboard";
@@ -99,7 +101,11 @@ export default function App() {
   const [expandedById, setExpandedById] = useState({});
   const [jsonTreeExpandTokenById, setJsonTreeExpandTokenById] = useState({});
   const [error, setError] = useState("");
-  const [actionState, setActionState] = useState({ reset: false, reload: false });
+  const [actionState, setActionState] = useState({
+    reset: false,
+    reload: false,
+    pauseToggle: false,
+  });
   const [timeZone, setTimeZone] = useState(() => {
     try {
       const persistedTimeZone = window.localStorage.getItem(LOCAL_STORAGE_TIMEZONE_KEY);
@@ -523,6 +529,23 @@ export default function App() {
     }
   }, [filterPayload, refreshCounts, refreshStats, resetPreviewState]);
 
+  const handlePauseToggle = useCallback(async () => {
+    setActionState((prev) => ({ ...prev, pauseToggle: true }));
+    try {
+      if (stats?.ingestPaused) {
+        await resumeIngestion();
+      } else {
+        await pauseIngestion();
+      }
+      await refreshStats();
+      setError("");
+    } catch (err) {
+      setError(err.message || "Failed to toggle ingestion.");
+    } finally {
+      setActionState((prev) => ({ ...prev, pauseToggle: false }));
+    }
+  }, [refreshStats, stats?.ingestPaused]);
+
   const handleTimeZoneChange = useCallback((nextTimeZone) => {
     setTimeZone(coerceTimeZoneOrLocal(nextTimeZone));
   }, []);
@@ -561,10 +584,13 @@ export default function App() {
         timestampField={stats?.timestampField}
         sourceRevision={stats?.sourceRevision ?? 0}
         searchStatus={stats?.searchStatus || "ready"}
+        ingestPaused={Boolean(stats?.ingestPaused)}
         onReload={handleReload}
         onReset={handleReset}
+        onPauseToggle={handlePauseToggle}
         resetLoading={actionState.reset}
         reloadLoading={actionState.reload}
+        pauseToggleLoading={actionState.pauseToggle}
         timeZone={timeZone}
         onTimeZoneChange={handleTimeZoneChange}
       />

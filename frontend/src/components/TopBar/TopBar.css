@@ -89,6 +89,30 @@
   background: #00ffb3;
 }
 
+.topbar-btn--pause {
+  border-color: rgba(255, 219, 102, 0.4);
+  color: #ffdb66;
+  background: rgba(255, 219, 102, 0.08);
+}
+
+.topbar-btn--pause:hover:not(:disabled) {
+  border-color: #ffdb66;
+  background: rgba(255, 219, 102, 0.18);
+  color: #fff;
+}
+
+.topbar-btn--resume {
+  border-color: rgba(88, 214, 141, 0.4);
+  color: #58d68d;
+  background: rgba(88, 214, 141, 0.1);
+}
+
+.topbar-btn--resume:hover:not(:disabled) {
+  border-color: #58d68d;
+  background: rgba(88, 214, 141, 0.2);
+  color: #fff;
+}
+
 .topbar-btn--reset {
   border-color: rgba(255, 107, 107, 0.4);
   color: var(--warn);
@@ -120,6 +144,22 @@
 
 .topbar-chip strong {
   color: var(--accent2);
+}
+
+.topbar-chip--running {
+  border-color: rgba(88, 214, 141, 0.4);
+}
+
+.topbar-chip--running strong {
+  color: #58d68d;
+}
+
+.topbar-chip--paused {
+  border-color: rgba(255, 219, 102, 0.4);
+}
+
+.topbar-chip--paused strong {
+  color: #ffdb66;
 }
 
 .topbar-chip--tz {
