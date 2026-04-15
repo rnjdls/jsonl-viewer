@@ -11,6 +11,9 @@ export function JsonCard({
   onLoadBody,
   onLoadRaw,
   onCollapse,
+  onCopy,
+  copyLabel = "Copy",
+  copyDisabled = false,
 }) {
   const lineLabel = row.lineNo ?? row.id;
   const hasParsedBody = Boolean(body?.parsed);
@@ -35,6 +38,15 @@ export function JsonCard({
         )}
 
         <div className="card-actions">
+          <button
+            className="card-btn card-btn--secondary"
+            onClick={onCopy}
+            disabled={copyDisabled}
+            title="Copy raw line"
+            aria-label="Copy raw JSON line to clipboard"
+          >
+            {copyLabel}
+          </button>
           {expanded ? (
             <button className="card-btn card-btn--secondary" onClick={onCollapse}>
               Collapse
