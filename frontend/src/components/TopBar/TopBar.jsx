@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TIMEZONE_LOCAL,
   coerceTimeZoneOrLocal,
@@ -43,7 +43,6 @@ function getSelectableTimeZones() {
  *   totalCount: number,
  *   parsedCount: number,
  *   errorCount: number,
- *   sourceRevision: number,
  *   searchStatus: string,
  *   ingestPaused: boolean,
  *   onReload: () => void,
@@ -62,7 +61,6 @@ export function TopBar({
   totalCount,
   parsedCount,
   errorCount,
-  sourceRevision,
   searchStatus,
   ingestPaused,
   onReload,
@@ -75,6 +73,9 @@ export function TopBar({
   onTimeZoneChange,
 }) {
   const [now, setNow] = useState(() => new Date());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuContainerRef = useRef(null);
+  const menuTriggerRef = useRef(null);
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -106,6 +107,56 @@ export function TopBar({
     onTimeZoneChange(event.target.value);
   };
 
+  const closeMenu = useCallback(({ focusTrigger = false } = {}) => {
+    setMenuOpen(false);
+    if (focusTrigger) {
+      window.requestAnimationFrame(() => {
+        menuTriggerRef.current?.focus();
+      });
+    }
+  }, []);
+
+  const toggleMenu = useCallback(() => {
+    setMenuOpen((isOpen) => !isOpen);
+  }, []);
+
+  const handleMenuActionClick = useCallback(
+    (event, action) => {
+      const closedFromKeyboard = event.detail === 0;
+      closeMenu({ focusTrigger: closedFromKeyboard });
+      action();
+    },
+    [closeMenu]
+  );
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const handleWindowMouseDown = (event) => {
+      const target = event.target;
+      if (menuContainerRef.current && !menuContainerRef.current.contains(target)) {
+        closeMenu();
+      }
+    };
+
+    const handleWindowKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu({ focusTrigger: true });
+      }
+    };
+
+    window.addEventListener("mousedown", handleWindowMouseDown);
+    window.addEventListener("keydown", handleWindowKeyDown);
+
+    return () => {
+      window.removeEventListener("mousedown", handleWindowMouseDown);
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [closeMenu, menuOpen]);
+
   return (
     <header className="topbar">
       <span className="topbar-logo">
@@ -121,25 +172,11 @@ export function TopBar({
 
       <div className="topbar-actions">
         <button
-          className="topbar-btn topbar-btn--reload"
-          onClick={onReload}
-          disabled={!filePath || reloadLoading}
-        >
-          {reloadLoading ? "Reloading..." : "Reload File"}
-        </button>
-        <button
           className={`topbar-btn ${ingestPaused ? "topbar-btn--resume" : "topbar-btn--pause"}`}
           onClick={onPauseToggle}
           disabled={!filePath || pauseToggleLoading}
         >
           {pauseToggleLoading ? "Working..." : ingestPaused ? "Resume" : "Pause"}
-        </button>
-        <button
-          className="topbar-btn topbar-btn--reset"
-          onClick={onReset}
-          disabled={!filePath || resetLoading}
-        >
-          {resetLoading ? "Resetting..." : "Delete All"}
         </button>
       </div>
 
@@ -152,9 +189,6 @@ export function TopBar({
         </span>
         <span className="topbar-chip">
           <strong>{errorCount}</strong> errors
-        </span>
-        <span className="topbar-chip">
-          rev <strong>{sourceRevision}</strong>
         </span>
         <span className="topbar-chip">
           search <strong>{searchStatus}</strong>
@@ -188,6 +222,48 @@ export function TopBar({
             ))}
           </select>
         </span>
+      </div>
+
+      <div className="topbar-menu" ref={menuContainerRef}>
+        <button
+          type="button"
+          ref={menuTriggerRef}
+          className="topbar-menu-trigger"
+          aria-label="Open admin menu"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-controls="topbar-admin-menu"
+          onClick={toggleMenu}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
+        {menuOpen && (
+          <div
+            id="topbar-admin-menu"
+            className="topbar-menu-dropdown"
+            role="menu"
+            aria-label="Admin actions"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="topbar-menu-item"
+              onClick={(event) => handleMenuActionClick(event, onReload)}
+              disabled={!filePath || reloadLoading}
+            >
+              {reloadLoading ? "Reloading..." : "Reload File"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="topbar-menu-item topbar-menu-item--danger"
+              onClick={(event) => handleMenuActionClick(event, onReset)}
+              disabled={!filePath || resetLoading}
+            >
+              {resetLoading ? "Resetting..." : "Delete All"}
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );
