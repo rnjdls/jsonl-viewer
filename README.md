@@ -84,7 +84,6 @@ Backend environment variables (Docker Compose defaults shown in `docker-compose.
 - `INGEST_MODE` (default: `file`): `file` or `kafka`.
 - `INGEST_SOURCE_ID` (optional, Kafka mode only): logical source id used for API `stats.filePath` and DB scoping. Default is `kafka:<topic>`.
 - `JSONL_FILE_PATH` (required): path to the JSONL file inside the backend container.
-- `JSONL_TIMESTAMP_FIELD` (default: `timestamp`): dot-path to a timestamp field.
 - `INGEST_POLL_INTERVAL_MS` (default: `1000`): polling interval in ms.
 - `INGEST_BATCH_SIZE` (default: `500`): insert batch size.
 - `APP_PREVIEW_STATEMENT_TIMEOUT` (default: `20s`): statement timeout for preview queries.
@@ -148,7 +147,7 @@ Frontend nginx proxy timeout env vars:
 ## API Endpoints
 
 - `GET /api/stats`
-  - Returns source id (`filePath`), counts from ingest state, timestamp field, last ingestion time, `sourceRevision`, `searchStatus` (`ready|building`), and `ingestPaused` (`true|false`).
+  - Returns source id (`filePath`), counts from ingest state, last ingestion time, `sourceRevision`, `searchStatus` (`ready|building`), and `ingestPaused` (`true|false`).
 
 - `POST /api/filters/count`
   - Body: `{ filters: [ { type, fieldPath, valueContains, query, from, to } ] }`
@@ -179,7 +178,7 @@ Frontend nginx proxy timeout env vars:
   - Uses keyset pagination with stable ordering:
     - `id`: `ORDER BY id`
     - `lineNo`: `ORDER BY line_no, id`
-    - `timestamp`: `ORDER BY ts NULLS LAST, id`
+    - `timestamp`: `ORDER BY value_ts NULLS LAST, id` where `value_ts` is from `jsonl_entry_field_index` for the effective timestamp field path.
 
 - `GET /api/entries/{id}`
   - Returns full row detail for the current file scope:
@@ -238,7 +237,7 @@ Ingest behavior note:
 
 - `jsonl_entry_field_index`
   - one row per JSON key occurrence
-  - `entry_id`, `file_path`, `field_key`, `value_text`, `value_type`, `is_null`, `is_empty`
+  - `entry_id`, `file_path`, `field_key`, `field_path`, `value_text`, `value_ts`, `value_type`, `is_null`, `is_empty`
 
 - `filter_count_cache`
   - keyed by `(file_path, request_hash)`

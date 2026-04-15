@@ -241,10 +241,11 @@ class FilterServiceTest {
         "OR"
     );
 
-    assertEquals(List.of("timeout", from, "status"), sql.params());
+    assertEquals(List.of("timeout", "timestamp", from, "status"), sql.params());
     assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
-    assertTrue(sql.candidateIdsSql().contains("ts >= ?3"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?4"));
+    assertTrue(sql.candidateIdsSql().contains("field_path = ?3"));
+    assertTrue(sql.candidateIdsSql().contains("value_ts >= ?4"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?5"));
     assertTrue(sql.candidateIdsSql().contains(" UNION "));
   }
 
@@ -261,13 +262,29 @@ class FilterServiceTest {
         "and"
     );
 
-    assertEquals(List.of("status", "worker failed", from, "details", "%Auto-generated%"), sql.params());
+    assertEquals(List.of("status", "worker failed", "timestamp", from, "details", "%Auto-generated%"), sql.params());
     assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
     assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?3)"));
-    assertTrue(sql.candidateIdsSql().contains("ts >= ?4"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?5"));
-    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?6"));
+    assertTrue(sql.candidateIdsSql().contains("field_path = ?4"));
+    assertTrue(sql.candidateIdsSql().contains("value_ts >= ?5"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?6"));
+    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?7"));
     assertTrue(sql.candidateIdsSql().contains(" INTERSECT "));
+  }
+
+  @Test
+  void buildFilterSqlTimestampUsesConfiguredFieldPath() {
+    Instant from = Instant.parse("2026-04-06T13:23:58Z");
+    Instant to = Instant.parse("2026-04-06T14:23:58Z");
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("timestamp", "headers.eventTime", null, null, null, from, to)
+    ));
+
+    assertEquals(List.of("headers.eventTime", from, to), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("FROM jsonl_entry_field_index"));
+    assertTrue(sql.candidateIdsSql().contains("field_path = ?2"));
+    assertTrue(sql.candidateIdsSql().contains("value_ts >= ?3"));
+    assertTrue(sql.candidateIdsSql().contains("value_ts <= ?4"));
   }
 
   @Test

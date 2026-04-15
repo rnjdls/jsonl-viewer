@@ -1,5 +1,4 @@
 import {
-  COMMON_TIMESTAMP_FIELDS,
   FIELD_FILTER_OP,
   FIELD_FILTER_OP_OPTIONS,
   FILTERS_OP,
@@ -24,7 +23,6 @@ import "./SearchBar.css";
  *   filtersOp:            import("../../utils/search").FiltersOp,
  *   loading:              boolean,
  *   countStatus:          "pending" | "ready",
- *   timestampField?:      string,
  *   onAddFieldFilter:     () => void,
  *   onAddTextFilter:      () => void,
  *   onAddTimestampFilter: () => void,
@@ -46,7 +44,6 @@ export function SearchBar({
   filtersOp,
   loading,
   countStatus,
-  timestampField,
   onAddFieldFilter,
   onAddTextFilter,
   onAddTimestampFilter,
@@ -56,8 +53,12 @@ export function SearchBar({
   onClearAll,
   onSearch,
 }) {
+  const visibleFilters = filters.filter((filter) => !filter.hidden);
   const canSearch = hasFilters || hasAppliedFilters;
   const operatorToggleDisabled = activeCount <= 1;
+  const hasVisibleTimestampFilter = visibleFilters.some(
+    (filter) => filter.type === FILTER_TYPE.TIMESTAMP
+  );
 
   return (
     <div className="sb">
@@ -71,7 +72,12 @@ export function SearchBar({
         <button className="sb-add-btn sb-add-btn--text" onClick={onAddTextFilter} title="Add full-text filter">
           + Text
         </button>
-        <button className="sb-add-btn sb-add-btn--ts" onClick={onAddTimestampFilter} title="Add timestamp range filter">
+        <button
+          className="sb-add-btn sb-add-btn--ts"
+          onClick={onAddTimestampFilter}
+          title={hasVisibleTimestampFilter ? "Only one timestamp range filter is allowed" : "Add timestamp range filter"}
+          disabled={hasVisibleTimestampFilter}
+        >
           + Timestamp Range
         </button>
 
@@ -95,7 +101,7 @@ export function SearchBar({
           </button>
         </div>
 
-        {hasFilters && (
+        {visibleFilters.length > 0 && (
           <button className="sb-clear-all" onClick={onClearAll}>
             ✕ Clear all
           </button>
@@ -122,9 +128,9 @@ export function SearchBar({
       </div>
 
       {/* ── Filter rows ──────────────────────────────────── */}
-      {filters.length > 0 && (
+      {visibleFilters.length > 0 && (
         <div className="sb-filters">
-          {filters.map((filter) =>
+          {visibleFilters.map((filter) =>
             filter.type === FILTER_TYPE.FIELD
               ? (
                 <FieldFilterRow
@@ -147,7 +153,6 @@ export function SearchBar({
                   <TimestampFilterRow
                     key={filter.id}
                     filter={filter}
-                    timestampField={timestampField}
                     onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
                     onRemove={() => onRemoveFilter(filter.id)}
                   />
@@ -232,8 +237,8 @@ function TextFilterRow({ filter, onUpdate, onRemove }) {
 
 /* ── TimestampFilterRow ─────────────────────────────────── */
 
-function TimestampFilterRow({ filter, timestampField, onUpdate, onRemove }) {
-  const placeholder = timestampField ? `${timestampField} (server)` : "timestamp field";
+function TimestampFilterRow({ filter, onUpdate, onRemove }) {
+  const placeholder = "headers.timestampField";
   const fromPlaceholder = "2026-04-06T13:23:58.801145590Z";
   const toPlaceholder = "2026-04-06T13:23:58+08:00 or 1712560000";
   const epochHint = "Epoch examples: 1712560000 / 1712560000000";
@@ -241,22 +246,15 @@ function TimestampFilterRow({ filter, timestampField, onUpdate, onRemove }) {
     <div className="sb-row sb-row--timestamp">
       <span className="sb-row-type sb-row-type--ts">TIME</span>
 
-      {/* Field selector — datalist gives quick suggestions */}
       <input
         className="sb-input sb-input--ts-field"
         type="text"
         placeholder={placeholder}
-        list="ts-field-suggestions"
         value={filter.field}
         onChange={(e) => onUpdate({ field: e.target.value })}
         spellCheck={false}
         aria-label="Timestamp field path"
       />
-      <datalist id="ts-field-suggestions">
-        {COMMON_TIMESTAMP_FIELDS.map((f) => (
-          <option key={f} value={f} />
-        ))}
-      </datalist>
 
       <span className="sb-row-between">between</span>
 

@@ -41,6 +41,7 @@ public class PreviewCursorCodec {
         case SORT_BY_TIMESTAMP:
           payload.put("ts", cursor.ts() == null ? null : cursor.ts().toString());
           payload.put("id", cursor.id());
+          payload.put("tsFieldPath", requiredTimestampFieldPath(cursor.tsFieldPath()));
           break;
         default:
           throw new IllegalArgumentException("Unsupported sortBy in cursor: " + cursor.sortBy());
@@ -54,7 +55,12 @@ public class PreviewCursorCodec {
     }
   }
 
-  public PreviewCursor decode(String encodedCursor, String expectedSortBy, String expectedSortDir) {
+  public PreviewCursor decode(
+      String encodedCursor,
+      String expectedSortBy,
+      String expectedSortDir,
+      String expectedTsFieldPath
+  ) {
     if (encodedCursor == null || encodedCursor.isBlank()) {
       return null;
     }
@@ -71,6 +77,7 @@ public class PreviewCursorCodec {
       long id = requiredLong(payload, "id");
       Long lineNo = null;
       Instant ts = null;
+      String tsFieldPath = null;
 
       if (SORT_BY_LINE_NO.equals(sortBy)) {
         lineNo = requiredLong(payload, "lineNo");
@@ -78,12 +85,20 @@ public class PreviewCursorCodec {
         if (!payload.has("ts")) {
           throw new IllegalArgumentException("Cursor field 'ts' is required for timestamp sort");
         }
+        if (!payload.has("tsFieldPath")) {
+          throw new IllegalArgumentException("Cursor field 'tsFieldPath' is required for timestamp sort");
+        }
         if (!payload.get("ts").isNull()) {
           ts = parseInstant(payload.get("ts").asText());
         }
+        tsFieldPath = requiredTimestampFieldPath(payload.get("tsFieldPath").asText());
+        String normalizedExpectedTsFieldPath = requiredTimestampFieldPath(expectedTsFieldPath);
+        if (!tsFieldPath.equals(normalizedExpectedTsFieldPath)) {
+          throw new IllegalArgumentException("Cursor timestamp field path does not match request");
+        }
       }
 
-      return new PreviewCursor(sortBy, sortDir, id, lineNo, ts);
+      return new PreviewCursor(sortBy, sortDir, id, lineNo, ts, tsFieldPath);
     } catch (IllegalArgumentException e) {
       throw e;
     } catch (Exception e) {
@@ -142,5 +157,12 @@ public class PreviewCursorCodec {
     } catch (DateTimeParseException e) {
       throw new IllegalArgumentException("Cursor field 'ts' is not a valid RFC3339 timestamp");
     }
+  }
+
+  private String requiredTimestampFieldPath(String value) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException("Cursor field 'tsFieldPath' must be non-blank");
+    }
+    return value.trim();
   }
 }

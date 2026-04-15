@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 
 @Entity
 @Table(name = "jsonl_entry_field_index")
@@ -23,8 +24,14 @@ public class JsonlEntryFieldIndex {
   @Column(name = "field_key", nullable = false, columnDefinition = "text")
   private String fieldKey;
 
+  @Column(name = "field_path", columnDefinition = "text")
+  private String fieldPath;
+
   @Column(name = "value_text", columnDefinition = "text")
   private String valueText;
+
+  @Column(name = "value_ts")
+  private Instant valueTs;
 
   @Column(name = "value_type", nullable = false, columnDefinition = "text")
   private String valueType;
@@ -41,7 +48,9 @@ public class JsonlEntryFieldIndex {
       long entryId,
       String filePath,
       String fieldKey,
+      String fieldPath,
       String valueText,
+      Instant valueTs,
       String valueType,
       boolean isNull,
       boolean isEmpty
@@ -49,7 +58,9 @@ public class JsonlEntryFieldIndex {
     this.entryId = entryId;
     this.filePath = filePath;
     this.fieldKey = fieldKey;
+    this.fieldPath = fieldPath;
     this.valueText = valueText;
+    this.valueTs = valueTs;
     this.valueType = valueType;
     this.isNull = isNull;
     this.isEmpty = isEmpty;
@@ -83,12 +94,28 @@ public class JsonlEntryFieldIndex {
     this.fieldKey = fieldKey;
   }
 
+  public String getFieldPath() {
+    return fieldPath;
+  }
+
+  public void setFieldPath(String fieldPath) {
+    this.fieldPath = fieldPath;
+  }
+
   public String getValueText() {
     return valueText;
   }
 
   public void setValueText(String valueText) {
     this.valueText = valueText;
+  }
+
+  public Instant getValueTs() {
+    return valueTs;
+  }
+
+  public void setValueTs(Instant valueTs) {
+    this.valueTs = valueTs;
   }
 
   public String getValueType() {

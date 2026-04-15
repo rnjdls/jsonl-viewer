@@ -8,7 +8,6 @@ public class AppProperties {
   private String ingestMode = "file";
   private String sourceId;
   private String jsonlFilePath;
-  private String jsonlTimestampField = "timestamp";
   private long ingestPollIntervalMs = 1000;
   private int ingestBatchSize = 500;
   private Duration previewStatementTimeout = Duration.ofSeconds(20);
@@ -37,14 +36,6 @@ public class AppProperties {
 
   public void setJsonlFilePath(String jsonlFilePath) {
     this.jsonlFilePath = jsonlFilePath;
-  }
-
-  public String getJsonlTimestampField() {
-    return jsonlTimestampField;
-  }
-
-  public void setJsonlTimestampField(String jsonlTimestampField) {
-    this.jsonlTimestampField = jsonlTimestampField;
   }
 
   public long getIngestPollIntervalMs() {

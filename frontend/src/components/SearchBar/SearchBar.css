@@ -252,7 +252,7 @@
 .sb-input--field    { width: 170px; }
 .sb-input--text-query { width: min(580px, calc(100vw - 160px)); }
 .sb-input--value    { width: 230px; }
-.sb-input--ts-field { width: 150px; }
+.sb-input--ts-field { width: min(360px, calc(100vw - 180px)); }
 .sb-input--datetime { width: min(360px, calc(100vw - 160px)); }
 .sb-select--field-op { width: 130px; }
 

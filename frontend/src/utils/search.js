@@ -1,4 +1,5 @@
 import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
+const DEFAULT_TIMESTAMP_FIELD = "timestamp";
 
 /**
  * @typedef {"contains" | "null" | "not_null" | "empty" | "not_empty"} FieldFilterOp
@@ -145,9 +146,9 @@ function entryMatchesFilter(entry, filter) {
 
   if (filter.type === FILTER_TYPE.TIMESTAMP) {
     const { field, from, to } = filter;
-    if (!field.trim()) return true;
+    const effectiveField = (field ?? "").trim() || DEFAULT_TIMESTAMP_FIELD;
 
-    const raw = getByPath(entry.parsed, field.trim());
+    const raw = getByPath(entry.parsed, effectiveField);
     if (raw === undefined || raw === null) return false;
 
     const ts = new Date(raw).getTime();
@@ -198,11 +199,14 @@ export function entryMatchesAllFilters(entry, filters) {
  * @returns {boolean}
  */
 export function isFilterActive(filter) {
+  if (filter.hidden) {
+    return false;
+  }
   if (filter.type === FILTER_TYPE.FIELD) {
     return filter.field.trim().length > 0;
   }
   if (filter.type === FILTER_TYPE.TIMESTAMP) {
-    return filter.field.trim().length > 0 && (!!filter.from || !!filter.to);
+    return !!filter.from || !!filter.to;
   }
   if (filter.type === FILTER_TYPE.TEXT) {
     return (filter.query ?? "").trim().length > 0;

@@ -58,7 +58,7 @@ class JsonlControllerPreviewTest {
     PreviewRequest request = new PreviewRequest();
     request.setSortBy("timestamp");
     request.setSortDir("asc");
-    request.setCursor(codec.encode(new PreviewCursor("id", "asc", 12L, null, null)));
+    request.setCursor(codec.encode(new PreviewCursor("id", "asc", 12L, null, null, null)));
 
     ResponseStatusException exception = assertThrows(
         ResponseStatusException.class,

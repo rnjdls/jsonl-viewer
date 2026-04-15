@@ -31,7 +31,7 @@ class JsonlIngestServicePauseStateTest {
         jsonlEntryRepository,
         ingestStateRepository,
         pauseState,
-        new JsonlEntryParser(new ObjectMapper(), properties),
+        new JsonlEntryParser(new ObjectMapper()),
         fieldIndexExtractor,
         entityManager
     );

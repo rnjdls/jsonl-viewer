@@ -43,7 +43,6 @@ function getSelectableTimeZones() {
  *   totalCount: number,
  *   parsedCount: number,
  *   errorCount: number,
- *   timestampField: string | null,
  *   sourceRevision: number,
  *   searchStatus: string,
  *   ingestPaused: boolean,
@@ -63,7 +62,6 @@ export function TopBar({
   totalCount,
   parsedCount,
   errorCount,
-  timestampField,
   sourceRevision,
   searchStatus,
   ingestPaused,
@@ -155,11 +153,6 @@ export function TopBar({
         <span className="topbar-chip">
           <strong>{errorCount}</strong> errors
         </span>
-        {timestampField && (
-          <span className="topbar-chip">
-            ts: <strong>{timestampField}</strong>
-          </span>
-        )}
         <span className="topbar-chip">
           rev <strong>{sourceRevision}</strong>
         </span>

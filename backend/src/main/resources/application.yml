@@ -51,7 +51,6 @@ app:
   ingest-mode: ${INGEST_MODE:file}
   source-id: ${INGEST_SOURCE_ID:}
   jsonl-file-path: ${JSONL_FILE_PATH:}
-  jsonl-timestamp-field: ${JSONL_TIMESTAMP_FIELD:timestamp}
   ingest-poll-interval-ms: ${INGEST_POLL_INTERVAL_MS:1000}
   ingest-batch-size: ${INGEST_BATCH_SIZE:500}
   preview-statement-timeout: ${APP_PREVIEW_STATEMENT_TIMEOUT:20s}

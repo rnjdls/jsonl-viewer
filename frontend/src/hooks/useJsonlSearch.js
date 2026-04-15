@@ -4,6 +4,7 @@ import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
 
 let _nextId = 1;
 const nextId = () => String(_nextId++);
+const DEFAULT_TIMESTAMP_FIELD = "timestamp";
 
 /**
  * Creates a blank field filter.
@@ -28,13 +29,24 @@ const makeTextFilter = () => ({
 });
 
 /**
+ * Creates a blank timestamp range filter.
+ * @returns {{ id: string, type: "timestamp", field: string, from: string, to: string }}
+ */
+const makeTimestampFilter = (id = nextId(), hidden = false, field = DEFAULT_TIMESTAMP_FIELD) => ({
+  id,
+  type: FILTER_TYPE.TIMESTAMP,
+  field,
+  from: "",
+  to: "",
+  hidden,
+});
+
+/**
  * Manages the collection of active filters and derives a filtered entry list.
  *
  * @param {import("../utils/jsonl").JsonlEntry[]} lines
- * @param {{ timestampField?: string }} options
  */
-export function useJsonlSearch(lines, options = {}) {
-  const defaultTimestampField = options.timestampField || "timestamp";
+export function useJsonlSearch(lines) {
   const [filters, setFilters] = useState([]);
   const [filtersOp, setFiltersOp] = useState(FILTERS_OP.AND);
   const [appliedFilterIds, setAppliedFilterIds] = useState([]);
@@ -67,17 +79,23 @@ export function useJsonlSearch(lines, options = {}) {
 
   const addTimestampFilter = useCallback(
     () =>
-      setFilters((prev) => [
-        ...prev,
-        {
-          id: nextId(),
-          type: FILTER_TYPE.TIMESTAMP,
-          field: defaultTimestampField,
-          from: "",
-          to: "",
-        },
-      ]),
-    [defaultTimestampField]
+      setFilters((prev) => {
+        const existingTimestampFilter = prev.find(
+          (filter) => filter.type === FILTER_TYPE.TIMESTAMP
+        );
+        if (existingTimestampFilter) {
+          if (existingTimestampFilter.hidden) {
+            return prev.map((filter) =>
+              filter.id === existingTimestampFilter.id
+                ? { ...filter, hidden: false, field: "" }
+                : filter
+            );
+          }
+          return prev;
+        }
+        return [...prev, makeTimestampFilter(nextId(), false, "")];
+      }),
+    []
   );
 
   const updateFilter = useCallback((id, patch) => {
@@ -87,12 +105,26 @@ export function useJsonlSearch(lines, options = {}) {
   }, []);
 
   const removeFilter = useCallback((id) => {
-    setFilters((prev) => prev.filter((f) => f.id !== id));
+    setFilters((prev) => {
+      const target = prev.find((filter) => filter.id === id);
+      if (target?.type === FILTER_TYPE.TIMESTAMP) {
+        return prev.map((filter) =>
+          filter.id === id ? makeTimestampFilter(id, true) : filter
+        );
+      }
+      return prev.filter((filter) => filter.id !== id);
+    });
     setAppliedFilterIds((prev) => prev.filter((filterId) => filterId !== id));
   }, []);
 
   const clearAllFilters = useCallback(() => {
-    setFilters([]);
+    setFilters((prev) => {
+      const timestampFilter = prev.find((filter) => filter.type === FILTER_TYPE.TIMESTAMP);
+      if (!timestampFilter) {
+        return [];
+      }
+      return [makeTimestampFilter(timestampFilter.id, true)];
+    });
     setAppliedFilterIds([]);
   }, []);
 
