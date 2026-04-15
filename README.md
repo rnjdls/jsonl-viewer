@@ -162,8 +162,7 @@ Frontend nginx proxy timeout env vars:
   - Returns the same shape as `POST /api/filters/count`.
 
 - `POST /api/filters/preview`
-  - Body: `{ filters: [...], sortBy, sortDir, cursor, limit }`
-  - `sortBy`: `timestamp | lineNo | id` (default: `timestamp`)
+  - Body: `{ filters: [...], filtersOp, sortDir, cursor, limit }`
   - `sortDir`: `asc | desc` (default: `desc`)
   - `limit`: page size (default: `10`, max: `500`)
   - `cursor`: opaque Base64URL cursor returned by the previous page (`null` for page 1)
@@ -176,9 +175,7 @@ Frontend nginx proxy timeout env vars:
     - `error` (`parse_error`)
     - `rawSnippet` and `rawTruncated` only for parse-error rows
   - Uses keyset pagination with stable ordering:
-    - `id`: `ORDER BY id`
-    - `lineNo`: `ORDER BY line_no, id`
-    - `timestamp`: `ORDER BY value_ts NULLS LAST, id` where `value_ts` is from `jsonl_entry_field_index` for the effective timestamp field path.
+    - fixed line ordering: `ORDER BY line_no {ASC|DESC}, id {ASC|DESC}`
 
 - `GET /api/entries/{id}`
   - Returns full row detail for the current file scope:

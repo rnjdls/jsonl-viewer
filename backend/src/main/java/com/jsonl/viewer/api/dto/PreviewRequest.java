@@ -11,7 +11,6 @@ public class PreviewRequest {
   private String timestampTo;
   private String filtersOp;
   private List<FilterSpec> filters;
-  private String sortBy;
   private String sortDir;
   private String cursor;
   private Integer limit;
@@ -62,14 +61,6 @@ public class PreviewRequest {
 
   public void setFilters(List<FilterSpec> filters) {
     this.filters = filters;
-  }
-
-  public String getSortBy() {
-    return sortBy;
-  }
-
-  public void setSortBy(String sortBy) {
-    this.sortBy = sortBy;
   }
 
   public String getSortDir() {
