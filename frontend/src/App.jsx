@@ -7,6 +7,7 @@ import { JsonCard } from "./components/JsonCard/JsonCard";
 import { EmptyState } from "./components/EmptyState/EmptyState";
 
 import {
+  getCountStatus,
   getCounts,
   getEntry,
   getEntryRaw,
@@ -28,11 +29,45 @@ function toTimestampPayload(value) {
   return trimmed || undefined;
 }
 
+function toFilterPayload(filters, filtersOp) {
+  if (!filters || filters.length === 0) {
+    return { filtersOp, filters: [] };
+  }
+
+  return {
+    filtersOp,
+    filters: filters.map((filter) => {
+      if (filter.type === "field") {
+        const op = filter.op || FIELD_FILTER_OP.CONTAINS;
+        return {
+          type: "field",
+          fieldPath: filter.field,
+          op,
+          ...(op === FIELD_FILTER_OP.CONTAINS ? { valueContains: filter.value } : {}),
+        };
+      }
+      if (filter.type === "text") {
+        return {
+          type: "text",
+          query: filter.query,
+        };
+      }
+      return {
+        type: "timestamp",
+        fieldPath: filter.field,
+        from: toTimestampPayload(filter.from),
+        to: toTimestampPayload(filter.to),
+      };
+    }),
+  };
+}
+
 export default function App() {
   const [stats, setStats] = useState(null);
   const [statsError, setStatsError] = useState("");
   const [counts, setCounts] = useState(null);
   const [countsLoading, setCountsLoading] = useState(false);
+  const [pendingCountRequestHash, setPendingCountRequestHash] = useState(null);
   const [previewRows, setPreviewRows] = useState([]);
   const [previewLimit, setPreviewLimit] = useState(DEFAULT_PREVIEW_LIMIT);
   const [previewSortBy, setPreviewSortBy] = useState(DEFAULT_SORT_BY);
@@ -81,37 +116,15 @@ export default function App() {
     setExpandedById({});
   }, []);
 
-  const filterPayload = useMemo(() => {
-    if (!appliedFilters || appliedFilters.length === 0) {
-      return { filtersOp, filters: [] };
-    }
-    return {
-      filtersOp,
-      filters: appliedFilters.map((filter) => {
-        if (filter.type === "field") {
-          const op = filter.op || FIELD_FILTER_OP.CONTAINS;
-          return {
-            type: "field",
-            fieldPath: filter.field,
-            op,
-            ...(op === FIELD_FILTER_OP.CONTAINS ? { valueContains: filter.value } : {}),
-          };
-        }
-        if (filter.type === "text") {
-          return {
-            type: "text",
-            query: filter.query,
-          };
-        }
-        return {
-          type: "timestamp",
-          fieldPath: filter.field,
-          from: toTimestampPayload(filter.from),
-          to: toTimestampPayload(filter.to),
-        };
-      }),
-    };
-  }, [appliedFilters, filtersOp]);
+  const activeFilterPayload = useMemo(
+    () => toFilterPayload(activeFilters, filtersOp),
+    [activeFilters, filtersOp]
+  );
+
+  const filterPayload = useMemo(
+    () => toFilterPayload(appliedFilters, filtersOp),
+    [appliedFilters, filtersOp]
+  );
 
   const refreshStats = useCallback(async () => {
     try {
@@ -123,22 +136,39 @@ export default function App() {
     }
   }, []);
 
-  const refreshCounts = useCallback(async () => {
-    if (!stats?.filePath) {
-      setCounts({ totalCount: 0, matchCount: 0 });
-      return;
-    }
-    setCountsLoading(true);
-    try {
-      const data = await getCounts(filterPayload);
-      setCounts(data);
-      setError("");
-    } catch (err) {
-      setError(err.message || "Failed to fetch counts.");
-    } finally {
-      setCountsLoading(false);
-    }
-  }, [filterPayload, stats?.filePath]);
+  const refreshCounts = useCallback(
+    async (payload) => {
+      if (!stats?.filePath) {
+        setCounts({
+          totalCount: 0,
+          matchCount: 0,
+          status: "ready",
+          requestHash: "",
+          sourceRevision: 0,
+          computedRevision: 0,
+          lastComputedAt: null,
+        });
+        setPendingCountRequestHash(null);
+        return;
+      }
+      setCountsLoading(true);
+      try {
+        const data = await getCounts(payload || { filtersOp, filters: [] });
+        setCounts(data);
+        if (data?.status === "pending" && data?.requestHash) {
+          setPendingCountRequestHash(data.requestHash);
+        } else {
+          setPendingCountRequestHash(null);
+        }
+        setError("");
+      } catch (err) {
+        setError(err.message || "Failed to fetch counts.");
+      } finally {
+        setCountsLoading(false);
+      }
+    },
+    [filtersOp, stats?.filePath]
+  );
 
   useEffect(() => {
     refreshStats();
@@ -147,14 +177,54 @@ export default function App() {
   }, [refreshStats]);
 
   useEffect(() => {
-    if (!stats?.filePath) return;
-    refreshCounts();
-  }, [stats?.totalCount, stats?.filePath, refreshCounts]);
+    if (!stats?.filePath) {
+      setCounts(null);
+      setPendingCountRequestHash(null);
+      return;
+    }
+    refreshCounts(filterPayload);
+  }, [stats?.filePath, refreshCounts]);
+
+  useEffect(() => {
+    if (!pendingCountRequestHash || !stats?.filePath) {
+      return;
+    }
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const data = await getCountStatus(pendingCountRequestHash);
+        if (cancelled) return;
+        setCounts(data);
+        if (data?.status === "ready") {
+          setPendingCountRequestHash(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err.message || "Failed to poll count status.");
+      }
+    };
+
+    poll();
+    const timer = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pendingCountRequestHash, stats?.filePath]);
+
+  useEffect(() => {
+    if (!pendingCountRequestHash || !stats?.filePath) {
+      return;
+    }
+    refreshCounts(filterPayload);
+  }, [filterPayload, pendingCountRequestHash, refreshCounts, stats?.filePath, stats?.sourceRevision]);
 
   const handleSearch = useCallback(async () => {
     applyFilters();
     resetPreviewState();
-  }, [applyFilters, resetPreviewState]);
+    await refreshCounts(activeFilterPayload);
+  }, [activeFilterPayload, applyFilters, refreshCounts, resetPreviewState]);
 
   const requestPreviewPage = useCallback(
     async (cursor) =>
@@ -324,36 +394,41 @@ export default function App() {
     try {
       await resetData();
       await refreshStats();
-      await refreshCounts();
+      await refreshCounts(filterPayload);
       resetPreviewState();
     } catch (err) {
       setError(err.message || "Failed to reset data.");
     } finally {
       setActionState((prev) => ({ ...prev, reset: false }));
     }
-  }, [refreshCounts, refreshStats, resetPreviewState]);
+  }, [filterPayload, refreshCounts, refreshStats, resetPreviewState]);
 
   const handleReload = useCallback(async () => {
     setActionState((prev) => ({ ...prev, reload: true }));
     try {
       await reloadData();
       await refreshStats();
-      await refreshCounts();
+      await refreshCounts(filterPayload);
       resetPreviewState();
     } catch (err) {
       setError(err.message || "Failed to reload data.");
     } finally {
       setActionState((prev) => ({ ...prev, reload: false }));
     }
-  }, [refreshCounts, refreshStats, resetPreviewState]);
+  }, [filterPayload, refreshCounts, refreshStats, resetPreviewState]);
 
   const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
-  const matchCount = counts?.matchCount ?? 0;
+  const exactMatchReady =
+    counts?.status === "ready"
+    && counts?.computedRevision === counts?.sourceRevision;
+  const matchCount = exactMatchReady ? (counts?.matchCount ?? 0) : 0;
   const activeCount = activeFilters?.length ?? 0;
-  const totalPages = Math.max(1, Math.ceil(matchCount / previewLimit));
-  const selectedPage = Math.min(pageIndex + 1, totalPages);
+  const totalPages = exactMatchReady ? Math.max(1, Math.ceil(matchCount / previewLimit)) : null;
+  const selectedPage = pageIndex + 1;
   const canGoPrev = previewActive && pageIndex > 0;
-  const canGoNext = previewActive && pageIndex + 1 < totalPages && Boolean(nextCursor);
+  const canGoNext = previewActive
+    && Boolean(nextCursor)
+    && (!exactMatchReady || pageIndex + 1 < totalPages);
 
   const emptyVariant = statsError
     ? "backend-offline"
@@ -361,7 +436,7 @@ export default function App() {
       ? "no-file"
       : counts && totalCount === 0
         ? "empty-file"
-        : counts && matchCount === 0 && hasActiveFilters
+        : counts && exactMatchReady && matchCount === 0 && hasAppliedFilters
           ? "no-results"
           : null;
 
@@ -374,6 +449,8 @@ export default function App() {
         parsedCount={stats?.parsedCount ?? 0}
         errorCount={stats?.errorCount ?? 0}
         timestampField={stats?.timestampField}
+        sourceRevision={stats?.sourceRevision ?? 0}
+        searchStatus={stats?.searchStatus || "ready"}
         onReload={handleReload}
         onReset={handleReset}
         resetLoading={actionState.reset}
@@ -390,6 +467,7 @@ export default function App() {
         activeCount={activeCount}
         filtersOp={filtersOp}
         loading={countsLoading}
+        countStatus={counts?.status || "ready"}
         timestampField={stats?.timestampField}
         onAddFieldFilter={addFieldFilter}
         onAddTextFilter={addTextFilter}
@@ -466,11 +544,11 @@ export default function App() {
                 <button
                   className="preview-btn"
                   onClick={handleLoadPreview}
-                  disabled={previewLoading || (counts && matchCount === 0)}
+                  disabled={previewLoading || (exactMatchReady && matchCount === 0)}
                 >
                   {previewActive ? "Reload Preview" : "Load Preview"}
                 </button>
-                {previewActive && (
+                {previewActive && exactMatchReady && (
                   <label className="preview-sort-label">
                     Page
                     <select
@@ -513,6 +591,13 @@ export default function App() {
               <div className="preview-empty">
                 Preview is off by default to keep the UI fast. Click "Load Preview"
                 to fetch the first page.
+              </div>
+            )}
+
+            {previewActive && !exactMatchReady && (
+              <div className="preview-empty">
+                Exact count is still pending. Page selection will unlock when
+                the background count completes.
               </div>
             )}
 

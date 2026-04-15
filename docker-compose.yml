@@ -25,6 +25,9 @@ services:
       JSONL_FILE_PATH: /data/sample.jsonl
       JSONL_TIMESTAMP_FIELD: timestamp
       INGEST_POLL_INTERVAL_MS: 1000
+      APP_PREVIEW_STATEMENT_TIMEOUT: 20s
+      APP_COUNT_JOB_STATEMENT_TIMEOUT: 10m
+      SPRING_MVC_ASYNC_REQUEST_TIMEOUT: 305s
     volumes:
       - ./data:/data
     depends_on:
@@ -40,6 +43,10 @@ services:
       target: runner
     image: jsonl-viewer:latest
     container_name: jsonl-viewer
+    environment:
+      API_PROXY_CONNECT_TIMEOUT: 30s
+      API_PROXY_SEND_TIMEOUT: 300s
+      API_PROXY_READ_TIMEOUT: 300s
     ports:
       - "3000:80"          # access via http://localhost:3000
     depends_on:

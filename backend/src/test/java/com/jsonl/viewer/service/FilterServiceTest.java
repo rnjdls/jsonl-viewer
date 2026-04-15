@@ -154,15 +154,16 @@ class FilterServiceTest {
   }
 
   @Test
-  void buildFilterSqlAddsFullTextCondition() {
+  void buildFilterSqlAddsFullTextCandidateQuery() {
     FilterSql sql = filterService.buildFilterSql(List.of(
         new FilterCriteria("text", null, null, null, "worker failed", null, null)
     ));
 
     assertEquals(1, sql.params().size());
     assertEquals("worker failed", sql.params().get(0));
-    assertTrue(sql.whereClause().contains("parsed IS NOT NULL"));
-    assertTrue(sql.whereClause().contains("to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', ?2)"));
+    assertTrue(sql.candidateIdsSql().contains("SELECT id FROM jsonl_entry"));
+    assertTrue(sql.candidateIdsSql().contains("parsed IS NOT NULL"));
+    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
   }
 
   @Test
@@ -171,28 +172,20 @@ class FilterServiceTest {
         new FilterCriteria("text", null, null, null, "   ", null, null)
     ));
 
-    assertEquals("WHERE file_path = ?1", sql.whereClause());
+    assertEquals("SELECT id FROM jsonl_entry WHERE file_path = ?1", sql.candidateIdsSql());
     assertTrue(sql.params().isEmpty());
   }
 
   @Test
-  void buildFilterSqlWithoutTextFilterKeepsExistingParsedWrapper() {
+  void buildFilterSqlFieldContainsUsesFieldIndexTable() {
     FilterSql sql = filterService.buildFilterSql(List.of(
         new FilterCriteria("field", "status", "contains", "500", null, null, null)
     ));
 
-    assertTrue(sql.whereClause().contains("parsed IS NULL OR (parsed IS NOT NULL AND"));
-  }
-
-  @Test
-  void buildFilterSqlFieldContainsUsesIlikePredicate() {
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "contains", "500", null, null, null)
-    ));
-
-    assertEquals(List.of("status", "status", "%500%"), sql.params());
-    assertTrue(sql.whereClause().contains("jsonb_exists(node.value, ?2)"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3)::text ILIKE ?4"));
+    assertEquals(List.of("status", "%500%"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("FROM jsonl_entry_field_index"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
+    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?3"));
   }
 
   @Test
@@ -201,8 +194,8 @@ class FilterServiceTest {
         new FilterCriteria("field", "status", "null", null, null, null, null)
     ));
 
-    assertEquals(List.of("status", "status"), sql.params());
-    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'null'"));
+    assertEquals(List.of("status"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("is_null = TRUE"));
   }
 
   @Test
@@ -211,39 +204,33 @@ class FilterServiceTest {
         new FilterCriteria("field", "status", "not_null", null, null, null, null)
     ));
 
-    assertEquals(List.of("status", "status"), sql.params());
-    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) <> 'null'"));
+    assertEquals(List.of("status"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("is_null = FALSE"));
   }
 
   @Test
-  void buildFilterSqlFieldEmptyUsesEmptyPredicates() {
+  void buildFilterSqlFieldEmptyUsesEmptyPredicate() {
     FilterSql sql = filterService.buildFilterSql(List.of(
         new FilterCriteria("field", "details", "empty", null, null, null, null)
     ));
 
-    assertEquals(List.of("details", "details"), sql.params());
-    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'string'"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '\"\"'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '[]'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) = '{}'::jsonb"));
+    assertEquals(List.of("details"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("is_empty = TRUE"));
   }
 
   @Test
-  void buildFilterSqlFieldNotEmptyUsesNotEmptyPredicates() {
+  void buildFilterSqlFieldNotEmptyUsesNotEmptyPredicate() {
     FilterSql sql = filterService.buildFilterSql(List.of(
         new FilterCriteria("field", "details", "not_empty", null, null, null, null)
     ));
 
-    assertEquals(List.of("details", "details"), sql.params());
-    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) = 'string'"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '\"\"'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '[]'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?3) <> '{}'::jsonb"));
-    assertTrue(sql.whereClause().contains("jsonb_typeof(jsonb_extract_path(node.value, ?3)) IN ('number','boolean')"));
+    assertEquals(List.of("details"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("is_empty = FALSE"));
+    assertTrue(sql.candidateIdsSql().contains("is_null = FALSE"));
   }
 
   @Test
-  void buildFilterSqlOrModeWrapsAndJoinsConditionsWithOr() {
+  void buildFilterSqlOrModeUsesUnion() {
     Instant from = Instant.parse("2026-04-06T13:23:58Z");
     FilterSql sql = filterService.buildFilterSql(
         List.of(
@@ -254,37 +241,15 @@ class FilterServiceTest {
         "OR"
     );
 
-    assertEquals(List.of("timeout", from, "status", "status"), sql.params());
-    assertTrue(sql.whereClause().contains("parsed IS NOT NULL AND ("));
-    assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?2) OR ts >= ?3 OR EXISTS ("));
+    assertEquals(List.of("timeout", from, "status"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
+    assertTrue(sql.candidateIdsSql().contains("ts >= ?3"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?4"));
+    assertTrue(sql.candidateIdsSql().contains(" UNION "));
   }
 
   @Test
-  void buildFilterSqlOrModeKeepsParameterOrderingAcrossMixedFilters() {
-    Instant from = Instant.parse("2026-04-06T13:23:58Z");
-    FilterSql sql = filterService.buildFilterSql(
-        List.of(
-            new FilterCriteria("field", "status", "null", null, null, null, null),
-            new FilterCriteria("text", null, null, null, "worker failed", null, null),
-            new FilterCriteria("timestamp", null, null, null, null, from, null),
-            new FilterCriteria("field", "details", "contains", "Auto-generated", null, null, null)
-        ),
-        "or"
-    );
-
-    assertEquals(
-        List.of("status", "status", "worker failed", from, "details", "details", "%Auto-generated%"),
-        sql.params()
-    );
-    assertTrue(sql.whereClause().contains("jsonb_exists(node.value, ?2)"));
-    assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?4)"));
-    assertTrue(sql.whereClause().contains("ts >= ?5"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?7)::text ILIKE ?8"));
-    assertTrue(sql.whereClause().contains(" OR "));
-  }
-
-  @Test
-  void buildFilterSqlAndModeKeepsParameterOrderingAcrossMixedFilters() {
+  void buildFilterSqlAndModeUsesIntersect() {
     Instant from = Instant.parse("2026-04-06T13:23:58Z");
     FilterSql sql = filterService.buildFilterSql(
         List.of(
@@ -296,15 +261,13 @@ class FilterServiceTest {
         "and"
     );
 
-    assertEquals(
-        List.of("status", "status", "worker failed", from, "details", "details", "%Auto-generated%"),
-        sql.params()
-    );
-    assertTrue(sql.whereClause().contains("jsonb_exists(node.value, ?2)"));
-    assertTrue(sql.whereClause().contains("plainto_tsquery('simple', ?4)"));
-    assertTrue(sql.whereClause().contains("ts >= ?5"));
-    assertTrue(sql.whereClause().contains("jsonb_extract_path(node.value, ?7)::text ILIKE ?8"));
-    assertTrue(sql.whereClause().contains(" AND "));
+    assertEquals(List.of("status", "worker failed", from, "details", "%Auto-generated%"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
+    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?3)"));
+    assertTrue(sql.candidateIdsSql().contains("ts >= ?4"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?5"));
+    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?6"));
+    assertTrue(sql.candidateIdsSql().contains(" INTERSECT "));
   }
 
   @Test

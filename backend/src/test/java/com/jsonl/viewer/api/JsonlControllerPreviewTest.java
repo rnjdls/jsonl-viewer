@@ -9,11 +9,15 @@ import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.config.AppProperties;
 import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.ingest.IngestAdminService;
+import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.PreviewCursor;
+import com.jsonl.viewer.service.FilterCountCacheService;
+import com.jsonl.viewer.service.FilterRequestHasher;
 import com.jsonl.viewer.service.FilterService;
 import com.jsonl.viewer.service.PreviewCursorCodec;
 import java.lang.reflect.Proxy;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -28,7 +32,12 @@ class JsonlControllerPreviewTest {
 
     AtomicBoolean repositoryCalled = new AtomicBoolean(false);
     JsonlEntryRepository repository = proxyRepository(repositoryCalled);
+    IngestStateRepository ingestStateRepository = org.mockito.Mockito.mock(IngestStateRepository.class);
+    org.mockito.Mockito.when(ingestStateRepository.findById(jsonlFilePath(properties)))
+        .thenReturn(Optional.empty());
     FilterService filterService = new FilterService();
+    FilterRequestHasher filterRequestHasher = new FilterRequestHasher();
+    FilterCountCacheService filterCountCacheService = org.mockito.Mockito.mock(FilterCountCacheService.class);
     PreviewCursorCodec codec = new PreviewCursorCodec(new ObjectMapper());
     IngestSourceResolver sourceResolver = new IngestSourceResolver(properties);
 
@@ -36,8 +45,10 @@ class JsonlControllerPreviewTest {
         properties,
         sourceResolver,
         repository,
-        null,
+        ingestStateRepository,
         filterService,
+        filterRequestHasher,
+        filterCountCacheService,
         new NoopIngestAdminService(),
         codec
     );
@@ -90,6 +101,10 @@ class JsonlControllerPreviewTest {
           return null;
         }
     );
+  }
+
+  private String jsonlFilePath(AppProperties properties) {
+    return properties.getJsonlFilePath();
   }
 
   private static class NoopIngestAdminService implements IngestAdminService {

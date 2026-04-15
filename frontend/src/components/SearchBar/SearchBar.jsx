@@ -23,6 +23,7 @@ import "./SearchBar.css";
  *   activeCount:          number,
  *   filtersOp:            import("../../utils/search").FiltersOp,
  *   loading:              boolean,
+ *   countStatus:          "pending" | "ready",
  *   timestampField?:      string,
  *   onAddFieldFilter:     () => void,
  *   onAddTextFilter:      () => void,
@@ -44,6 +45,7 @@ export function SearchBar({
   activeCount,
   filtersOp,
   loading,
+  countStatus,
   timestampField,
   onAddFieldFilter,
   onAddTextFilter,
@@ -106,6 +108,8 @@ export function SearchBar({
         <span className="sb-count">
           {loading ? (
             <span>Loading counts...</span>
+          ) : countStatus === "pending" ? (
+            <span>Calculating exact count...</span>
           ) : (
             <>
               <strong>{matchCount}</strong> / {totalCount} lines

@@ -20,8 +20,12 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy built assets from the builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV API_PROXY_CONNECT_TIMEOUT=30s
+ENV API_PROXY_SEND_TIMEOUT=300s
+ENV API_PROXY_READ_TIMEOUT=300s
+
+# Copy custom nginx config template; nginx entrypoint renders env vars.
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 
