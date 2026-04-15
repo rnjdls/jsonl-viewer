@@ -148,7 +148,7 @@ Frontend nginx proxy timeout env vars:
 ## API Endpoints
 
 - `GET /api/stats`
-  - Returns source id (`filePath`), counts from ingest state, timestamp field, last ingestion time, `sourceRevision`, and `searchStatus` (`ready|building`).
+  - Returns source id (`filePath`), counts from ingest state, timestamp field, last ingestion time, `sourceRevision`, `searchStatus` (`ready|building`), and `ingestPaused` (`true|false`).
 
 - `POST /api/filters/count`
   - Body: `{ filters: [ { type, fieldPath, valueContains, query, from, to } ] }`
@@ -195,6 +195,16 @@ Frontend nginx proxy timeout env vars:
 - `POST /api/admin/reload`
   - File mode: clears ingest state and re-reads the file from the start.
   - Kafka mode: seeks consumer-group offsets to beginning, clears rows, and resets ingest state.
+
+- `POST /api/admin/pause`
+  - Pauses background ingestion.
+  - File mode: scheduled poll/tail loop stops ingesting new bytes.
+  - Kafka mode: listener container is stopped.
+
+- `POST /api/admin/resume`
+  - Resumes background ingestion after a pause.
+  - File mode: scheduled poll/tail loop continues on next poll.
+  - Kafka mode: listener container is started.
 
 ## Data Model
 

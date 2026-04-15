@@ -33,6 +33,7 @@ public class JsonlIngestService {
   private final IngestSourceResolver sourceResolver;
   private final JsonlEntryRepository jsonlEntryRepository;
   private final IngestStateRepository ingestStateRepository;
+  private final IngestPauseState pauseState;
   private final JsonlEntryParser jsonlEntryParser;
   private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
   private final EntityManager entityManager;
@@ -43,6 +44,7 @@ public class JsonlIngestService {
       IngestSourceResolver sourceResolver,
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
+      IngestPauseState pauseState,
       JsonlEntryParser jsonlEntryParser,
       JsonFieldIndexExtractor jsonFieldIndexExtractor,
       EntityManager entityManager
@@ -51,6 +53,7 @@ public class JsonlIngestService {
     this.sourceResolver = sourceResolver;
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
+    this.pauseState = pauseState;
     this.jsonlEntryParser = jsonlEntryParser;
     this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
     this.entityManager = entityManager;
@@ -60,6 +63,9 @@ public class JsonlIngestService {
   @Scheduled(fixedDelayString = "${app.ingest-poll-interval-ms:1000}")
   public void pollFile() {
     if (!sourceResolver.isFileMode()) {
+      return;
+    }
+    if (pauseState.isPaused()) {
       return;
     }
     ingest(false, false, false);

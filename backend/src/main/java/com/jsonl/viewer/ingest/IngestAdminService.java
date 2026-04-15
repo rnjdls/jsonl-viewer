@@ -4,4 +4,8 @@ public interface IngestAdminService {
   void reset();
 
   void reload();
+
+  void pause();
+
+  void resume();
 }

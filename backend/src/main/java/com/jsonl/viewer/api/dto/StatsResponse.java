@@ -10,5 +10,6 @@ public record StatsResponse(
     long errorCount,
     Instant lastIngestedAt,
     long sourceRevision,
-    String searchStatus
+    String searchStatus,
+    boolean ingestPaused
 ) {}
