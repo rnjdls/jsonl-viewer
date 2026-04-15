@@ -137,6 +137,7 @@ export default function App() {
   });
   const copyResetTimersRef = useRef({});
   const copyInFlightByIdRef = useRef({});
+  const autoPreviewRunKeyRef = useRef("");
 
   const clearAllCopyResetTimers = useCallback(() => {
     Object.values(copyResetTimersRef.current).forEach((timerId) => {
@@ -244,7 +245,7 @@ export default function App() {
   const refreshCounts = useCallback(
     async (payload) => {
       if (!stats?.filePath) {
-        setCounts({
+        const emptyCounts = {
           totalCount: 0,
           matchCount: 0,
           status: "ready",
@@ -252,9 +253,10 @@ export default function App() {
           sourceRevision: 0,
           computedRevision: 0,
           lastComputedAt: null,
-        });
+        };
+        setCounts(emptyCounts);
         setPendingCountRequestHash(null);
-        return;
+        return emptyCounts;
       }
       setCountsLoading(true);
       try {
@@ -266,8 +268,10 @@ export default function App() {
           setPendingCountRequestHash(null);
         }
         setError("");
+        return data;
       } catch (err) {
         setError(err.message || "Failed to fetch counts.");
+        return null;
       } finally {
         setCountsLoading(false);
       }
@@ -325,17 +329,10 @@ export default function App() {
     refreshCounts(filterPayload);
   }, [filterPayload, pendingCountRequestHash, refreshCounts, stats?.filePath, stats?.sourceRevision]);
 
-  const handleSearch = useCallback(async () => {
-    if (uiLocked) return;
-    applyFilters();
-    resetPreviewState();
-    await refreshCounts(activeFilterPayload);
-  }, [activeFilterPayload, applyFilters, refreshCounts, resetPreviewState, uiLocked]);
-
   const requestPreviewPage = useCallback(
-    async (cursor) =>
+    async (cursor, filterPayloadOverride) =>
       getPreview({
-        ...filterPayload,
+        ...(filterPayloadOverride ?? filterPayload),
         cursor,
         sortDir: previewSortDir,
         limit: previewLimit,
@@ -344,11 +341,11 @@ export default function App() {
   );
 
   const fetchPreviewPage = useCallback(
-    async (cursor, targetPageIndex, historySeed) => {
+    async (cursor, targetPageIndex, historySeed, filterPayloadOverride) => {
       if (!stats?.filePath) return;
       setPreviewLoading(true);
       try {
-        const data = await requestPreviewPage(cursor);
+        const data = await requestPreviewPage(cursor, filterPayloadOverride);
         const rows = data?.rows ?? [];
         const receivedNextCursor = data?.nextCursor ?? null;
         setPreviewRows(rows);
@@ -375,6 +372,67 @@ export default function App() {
     },
     [requestPreviewPage, stats?.filePath]
   );
+
+  const handleSearch = useCallback(async () => {
+    if (uiLocked) return;
+    applyFilters();
+    resetPreviewState();
+    const nextCounts = await refreshCounts(activeFilterPayload);
+    if (!nextCounts) return;
+    const totalAfterSearch = nextCounts?.totalCount ?? stats?.totalCount ?? 0;
+    const exactMatchReadyAfterSearch =
+      nextCounts?.status === "ready"
+      && nextCounts?.computedRevision === nextCounts?.sourceRevision;
+    const matchAfterSearch = nextCounts?.matchCount ?? 0;
+
+    if (!stats?.filePath || totalAfterSearch <= 0) return;
+    if (exactMatchReadyAfterSearch && matchAfterSearch === 0) return;
+
+    await fetchPreviewPage(null, 0, undefined, activeFilterPayload);
+  }, [
+    activeFilterPayload,
+    applyFilters,
+    fetchPreviewPage,
+    refreshCounts,
+    resetPreviewState,
+    stats?.filePath,
+    stats?.totalCount,
+    uiLocked,
+  ]);
+
+  useEffect(() => {
+    if (!stats?.filePath || uiLocked || previewActive || previewLoading) {
+      return;
+    }
+
+    const sourceRevision = counts?.sourceRevision ?? stats?.sourceRevision ?? 0;
+    const autoPreviewKey = `${stats.filePath}::${sourceRevision}`;
+    if (autoPreviewRunKeyRef.current === autoPreviewKey) {
+      return;
+    }
+
+    const totalFromCounts = counts?.totalCount;
+    const totalForAutoPreview =
+      (typeof totalFromCounts === "number" ? totalFromCounts : stats?.totalCount) ?? 0;
+    if (totalForAutoPreview <= 0) {
+      return;
+    }
+
+    autoPreviewRunKeyRef.current = autoPreviewKey;
+    fetchPreviewPage(null, 0);
+  }, [
+    counts?.sourceRevision,
+    counts?.totalCount,
+    fetchPreviewPage,
+    previewActive,
+    previewLimit,
+    previewLoading,
+    previewSortDir,
+    stats?.filePath,
+    stats?.sourceRevision,
+    stats?.totalCount,
+    uiLocked,
+  ]);
 
   const handleLoadPreview = useCallback(async () => {
     if (uiLocked) return;
@@ -429,6 +487,7 @@ export default function App() {
     (event) => {
       if (uiLocked) return;
       const nextSortDir = event.target.value;
+      autoPreviewRunKeyRef.current = "";
       setPreviewSortDir(nextSortDir);
       resetPreviewState();
     },
@@ -440,6 +499,7 @@ export default function App() {
       if (uiLocked) return;
       const nextLimit = Number.parseInt(event.target.value, 10);
       if (Number.isNaN(nextLimit)) return;
+      autoPreviewRunKeyRef.current = "";
       setPreviewLimit(nextLimit);
       resetPreviewState();
     },
@@ -765,10 +825,10 @@ export default function App() {
               </div>
             </div>
 
-            {!previewActive && (
+            {!previewActive && !previewLoading && (
               <div className="preview-empty">
-                Preview is off by default to keep the UI fast. Click "Load Preview"
-                to fetch the first page.
+                Preview loads automatically when data is available. Use "Load Preview"
+                to reload page 1 at any time.
               </div>
             )}
 

@@ -37,6 +37,15 @@ const READY_COUNTS = {
   computedRevision: 2,
   lastComputedAt: "2026-04-10T10:15:30.000Z",
 };
+const EMPTY_STATS = {
+  ...BASE_STATS,
+  totalCount: 0,
+};
+const EMPTY_COUNTS = {
+  ...READY_COUNTS,
+  totalCount: 0,
+  matchCount: 0,
+};
 
 function deferred() {
   let resolve;
@@ -206,14 +215,126 @@ describe("App admin confirmations and lock", () => {
 
     expect(screen.queryByLabelText("Sort by")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Load Preview" }));
+    await user.click(screen.getByRole("button", { name: "Reload Preview" }));
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+
+    api.getPreview.mock.calls.forEach(([previewPayload]) => {
+      expect(Object.prototype.hasOwnProperty.call(previewPayload, "sortBy")).toBe(false);
+      expect(previewPayload.sortDir).toBe("desc");
+    });
+  });
+
+  it("auto-loads preview on initial render when the file has rows", async () => {
+    render(<App />);
+    await waitForInitialLoad();
 
     await waitFor(() => {
       expect(api.getPreview).toHaveBeenCalledTimes(1);
     });
+    expect(api.getPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filtersOp: "and",
+        filters: [],
+        cursor: null,
+        sortDir: "desc",
+        limit: 10,
+      })
+    );
+  });
 
-    const previewPayload = api.getPreview.mock.calls[0][0];
-    expect(Object.prototype.hasOwnProperty.call(previewPayload, "sortBy")).toBe(false);
-    expect(previewPayload.sortDir).toBe("desc");
+  it("auto-loads preview after Search using the active filter payload", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "level");
+    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filtersOp: "and",
+        filters: [
+          expect.objectContaining({
+            type: "field",
+            fieldPath: "level",
+            op: "contains",
+            valueContains: "error",
+          }),
+        ],
+        cursor: null,
+        sortDir: "desc",
+        limit: 10,
+      })
+    );
+  });
+
+  it("auto-reloads preview when lines per page changes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Lines/page" }), "25");
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        cursor: null,
+        sortDir: "desc",
+        limit: 25,
+      })
+    );
+  });
+
+  it("auto-reloads preview when direction changes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Direction" }), "asc");
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        cursor: null,
+        sortDir: "asc",
+        limit: 10,
+      })
+    );
+  });
+
+  it("does not auto-load preview when total count is zero", async () => {
+    api.getStats.mockResolvedValue(EMPTY_STATS);
+    api.getCounts.mockResolvedValue(EMPTY_COUNTS);
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await waitFor(() => {
+      expect(api.getPreview).not.toHaveBeenCalled();
+    });
   });
 });
