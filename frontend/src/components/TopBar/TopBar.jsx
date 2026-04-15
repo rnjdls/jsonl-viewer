@@ -51,6 +51,7 @@ function getSelectableTimeZones() {
  *   resetLoading: boolean,
  *   reloadLoading: boolean,
  *   pauseToggleLoading: boolean,
+ *   globalLocked: boolean,
  *   timeZone: string,
  *   onTimeZoneChange: (timeZone: string) => void,
  * }} props
@@ -69,6 +70,7 @@ export function TopBar({
   resetLoading,
   reloadLoading,
   pauseToggleLoading,
+  globalLocked,
   timeZone,
   onTimeZoneChange,
 }) {
@@ -117,8 +119,9 @@ export function TopBar({
   }, []);
 
   const toggleMenu = useCallback(() => {
+    if (globalLocked) return;
     setMenuOpen((isOpen) => !isOpen);
-  }, []);
+  }, [globalLocked]);
 
   const handleMenuActionClick = useCallback(
     (event, action) => {
@@ -128,6 +131,12 @@ export function TopBar({
     },
     [closeMenu]
   );
+
+  useEffect(() => {
+    if (globalLocked) {
+      closeMenu();
+    }
+  }, [closeMenu, globalLocked]);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -174,7 +183,7 @@ export function TopBar({
         <button
           className={`topbar-btn ${ingestPaused ? "topbar-btn--resume" : "topbar-btn--pause"}`}
           onClick={onPauseToggle}
-          disabled={!filePath || pauseToggleLoading}
+          disabled={globalLocked || !filePath || pauseToggleLoading}
         >
           {pauseToggleLoading ? "Working..." : ingestPaused ? "Resume" : "Pause"}
         </button>
@@ -214,6 +223,7 @@ export function TopBar({
             value={selectedTimeZone}
             onChange={handleTimeZoneSelectChange}
             aria-label="Timezone"
+            disabled={globalLocked}
           >
             {timeZoneOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -234,6 +244,7 @@ export function TopBar({
           aria-expanded={menuOpen}
           aria-controls="topbar-admin-menu"
           onClick={toggleMenu}
+          disabled={globalLocked}
         >
           <span aria-hidden="true">☰</span>
         </button>
@@ -249,7 +260,7 @@ export function TopBar({
               role="menuitem"
               className="topbar-menu-item"
               onClick={(event) => handleMenuActionClick(event, onReload)}
-              disabled={!filePath || reloadLoading}
+              disabled={globalLocked || !filePath || reloadLoading}
             >
               {reloadLoading ? "Reloading..." : "Reload File"}
             </button>
@@ -258,7 +269,7 @@ export function TopBar({
               role="menuitem"
               className="topbar-menu-item topbar-menu-item--danger"
               onClick={(event) => handleMenuActionClick(event, onReset)}
-              disabled={!filePath || resetLoading}
+              disabled={globalLocked || !filePath || resetLoading}
             >
               {resetLoading ? "Resetting..." : "Delete All"}
             </button>

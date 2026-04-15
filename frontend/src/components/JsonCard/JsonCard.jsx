@@ -16,6 +16,7 @@ export function JsonCard({
   copyLabel = "Copy",
   copyDisabled = false,
   expandAllToken = 0,
+  globalDisabled = false,
 }) {
   const lineLabel = row.lineNo ?? row.id;
   const hasParsedBody = Boolean(body?.parsed);
@@ -43,7 +44,7 @@ export function JsonCard({
           <button
             className="card-btn card-btn--secondary"
             onClick={onCopy}
-            disabled={copyDisabled}
+            disabled={globalDisabled || copyDisabled}
             title="Copy raw line"
             aria-label="Copy raw JSON line to clipboard"
           >
@@ -55,16 +56,17 @@ export function JsonCard({
               onClick={onExpandAll}
               title="Expand all JSON fields"
               aria-label="Expand all JSON fields"
+              disabled={globalDisabled}
             >
               Expand all
             </button>
           )}
           {expanded ? (
-            <button className="card-btn card-btn--secondary" onClick={onCollapse}>
+            <button className="card-btn card-btn--secondary" onClick={onCollapse} disabled={globalDisabled}>
               Collapse
             </button>
           ) : (
-            <button className="card-btn" onClick={onLoadBody} disabled={loadingBody}>
+            <button className="card-btn" onClick={onLoadBody} disabled={globalDisabled || loadingBody}>
               {loadingBody ? "Loading body..." : "Load body"}
             </button>
           )}
@@ -99,7 +101,7 @@ export function JsonCard({
               <button
                 className="card-btn card-btn--secondary"
                 onClick={onLoadRaw}
-                disabled={loadingRaw}
+                disabled={globalDisabled || loadingRaw}
               >
                 {loadingRaw ? "Loading full raw..." : "Load full raw"}
               </button>
