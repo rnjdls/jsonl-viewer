@@ -17,6 +17,12 @@ import {
   resetData,
 } from "./utils/api";
 import { copyText } from "./utils/clipboard";
+import {
+  TIMEZONE_LOCAL,
+  coerceTimeZoneOrLocal,
+  formatDateTimeTooltip,
+  formatTime,
+} from "./utils/datetime";
 import { FIELD_FILTER_OP } from "./constants";
 
 import "./App.css";
@@ -24,6 +30,7 @@ import "./App.css";
 const DEFAULT_PREVIEW_LIMIT = 10;
 const DEFAULT_SORT_BY = "timestamp";
 const DEFAULT_SORT_DIR = "desc";
+const LOCAL_STORAGE_TIMEZONE_KEY = "jsonlLive.timeZone";
 
 function getCopyLabel(copyStatus) {
   if (copyStatus === "copying") return "Copying...";
@@ -93,6 +100,14 @@ export default function App() {
   const [jsonTreeExpandTokenById, setJsonTreeExpandTokenById] = useState({});
   const [error, setError] = useState("");
   const [actionState, setActionState] = useState({ reset: false, reload: false });
+  const [timeZone, setTimeZone] = useState(() => {
+    try {
+      const persistedTimeZone = window.localStorage.getItem(LOCAL_STORAGE_TIMEZONE_KEY);
+      return coerceTimeZoneOrLocal(persistedTimeZone);
+    } catch {
+      return TIMEZONE_LOCAL;
+    }
+  });
   const copyResetTimersRef = useRef({});
   const copyInFlightByIdRef = useRef({});
 
@@ -152,6 +167,14 @@ export default function App() {
     },
     [clearAllCopyResetTimers]
   );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LOCAL_STORAGE_TIMEZONE_KEY, timeZone);
+    } catch {
+      // Ignore blocked or unavailable localStorage.
+    }
+  }, [timeZone]);
 
   const activeFilterPayload = useMemo(
     () => toFilterPayload(activeFilters, filtersOp),
@@ -500,6 +523,10 @@ export default function App() {
     }
   }, [filterPayload, refreshCounts, refreshStats, resetPreviewState]);
 
+  const handleTimeZoneChange = useCallback((nextTimeZone) => {
+    setTimeZone(coerceTimeZoneOrLocal(nextTimeZone));
+  }, []);
+
   const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
   const exactMatchReady =
     counts?.status === "ready"
@@ -538,6 +565,8 @@ export default function App() {
         onReset={handleReset}
         resetLoading={actionState.reset}
         reloadLoading={actionState.reload}
+        timeZone={timeZone}
+        onTimeZoneChange={handleTimeZoneChange}
       />
 
       <SearchBar
@@ -726,8 +755,11 @@ export default function App() {
           </span>
         )}
         {stats?.lastIngestedAt && (
-          <span className="app-footer-time">
-            Last ingest: {new Date(stats.lastIngestedAt).toLocaleTimeString()}
+          <span
+            className="app-footer-time"
+            title={formatDateTimeTooltip(stats.lastIngestedAt, timeZone)}
+          >
+            Last ingest: {formatTime(stats.lastIngestedAt, timeZone)}
           </span>
         )}
       </footer>

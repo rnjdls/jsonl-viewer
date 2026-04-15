@@ -121,3 +121,27 @@
 .topbar-chip strong {
   color: var(--accent2);
 }
+
+.topbar-chip--tz {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 6px;
+}
+
+.topbar-chip-select {
+  min-height: 22px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.topbar-chip-select:focus {
+  outline: none;
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 1px rgba(77, 159, 255, 0.45);
+}
