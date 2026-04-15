@@ -8,5 +8,7 @@ public record StatsResponse(
     long totalCount,
     long parsedCount,
     long errorCount,
-    Instant lastIngestedAt
+    Instant lastIngestedAt,
+    long sourceRevision,
+    String searchStatus
 ) {}

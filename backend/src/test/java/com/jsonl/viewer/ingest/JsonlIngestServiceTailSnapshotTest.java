@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -55,11 +56,14 @@ class JsonlIngestServiceTailSnapshotTest {
 
       JsonlEntryRepository jsonlEntryRepository = mock(JsonlEntryRepository.class);
       IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
+      JsonFieldIndexExtractor fieldIndexExtractor = mock(JsonFieldIndexExtractor.class);
       EntityManager entityManager = mock(EntityManager.class);
 
       when(ingestStateRepository.findById(jsonlFile.toString())).thenReturn(Optional.empty());
       when(ingestStateRepository.save(any(IngestState.class)))
           .thenAnswer((Answer<IngestState>) invocation -> invocation.getArgument(0));
+      when(fieldIndexExtractor.extract(any(String.class), any(Long.class), any()))
+          .thenReturn(List.of());
 
       AtomicInteger persistedCount = new AtomicInteger();
       org.mockito.Mockito.doAnswer(invocation -> {
@@ -75,6 +79,7 @@ class JsonlIngestServiceTailSnapshotTest {
           jsonlEntryRepository,
           ingestStateRepository,
           new JsonlEntryParser(new ObjectMapper(), properties),
+          fieldIndexExtractor,
           entityManager
       );
 

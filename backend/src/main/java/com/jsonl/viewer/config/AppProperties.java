@@ -1,5 +1,6 @@
 package com.jsonl.viewer.config;
 
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app")
@@ -10,6 +11,8 @@ public class AppProperties {
   private String jsonlTimestampField = "timestamp";
   private long ingestPollIntervalMs = 1000;
   private int ingestBatchSize = 500;
+  private Duration previewStatementTimeout = Duration.ofSeconds(20);
+  private Duration countJobStatementTimeout = Duration.ofMinutes(10);
   private Kafka kafka = new Kafka();
 
   public String getIngestMode() {
@@ -58,6 +61,22 @@ public class AppProperties {
 
   public void setIngestBatchSize(int ingestBatchSize) {
     this.ingestBatchSize = ingestBatchSize;
+  }
+
+  public Duration getPreviewStatementTimeout() {
+    return previewStatementTimeout;
+  }
+
+  public void setPreviewStatementTimeout(Duration previewStatementTimeout) {
+    this.previewStatementTimeout = previewStatementTimeout;
+  }
+
+  public Duration getCountJobStatementTimeout() {
+    return countJobStatementTimeout;
+  }
+
+  public void setCountJobStatementTimeout(Duration countJobStatementTimeout) {
+    this.countJobStatementTimeout = countJobStatementTimeout;
   }
 
   public Kafka getKafka() {

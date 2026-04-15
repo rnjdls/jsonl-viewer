@@ -11,7 +11,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class PreviewQueryBuilderTest {
-  private static final FilterSql BASE_FILTER = new FilterSql("WHERE file_path = ?1", List.of());
+  private static final FilterSql BASE_FILTER = new FilterSql(
+      "SELECT id FROM jsonl_entry WHERE file_path = ?1",
+      List.of()
+  );
 
   @Test
   void buildsIdAscQuery() {
@@ -23,8 +26,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND id > ?2"));
-    assertTrue(query.sql().contains("ORDER BY id ASC"));
+    assertTrue(query.sql().contains("AND e.id > ?2"));
+    assertTrue(query.sql().contains("ORDER BY e.id ASC"));
     assertEquals(List.of(100L, 200), query.params());
   }
 
@@ -38,8 +41,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND id < ?2"));
-    assertTrue(query.sql().contains("ORDER BY id DESC"));
+    assertTrue(query.sql().contains("AND e.id < ?2"));
+    assertTrue(query.sql().contains("ORDER BY e.id DESC"));
     assertEquals(List.of(100L, 200), query.params());
   }
 
@@ -53,8 +56,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND (line_no > ?2 OR (line_no = ?3 AND id > ?4))"));
-    assertTrue(query.sql().contains("ORDER BY line_no ASC, id ASC"));
+    assertTrue(query.sql().contains("AND (e.line_no > ?2 OR (e.line_no = ?3 AND e.id > ?4))"));
+    assertTrue(query.sql().contains("ORDER BY e.line_no ASC, e.id ASC"));
     assertEquals(List.of(55L, 55L, 11L, 200), query.params());
   }
 
@@ -68,8 +71,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND (line_no < ?2 OR (line_no = ?3 AND id < ?4))"));
-    assertTrue(query.sql().contains("ORDER BY line_no DESC, id DESC"));
+    assertTrue(query.sql().contains("AND (e.line_no < ?2 OR (e.line_no = ?3 AND e.id < ?4))"));
+    assertTrue(query.sql().contains("ORDER BY e.line_no DESC, e.id DESC"));
     assertEquals(List.of(55L, 55L, 11L, 200), query.params());
   }
 
@@ -84,8 +87,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND (ts > ?2 OR (ts = ?3 AND id > ?4) OR ts IS NULL)"));
-    assertTrue(query.sql().contains("ORDER BY ts ASC NULLS LAST, id ASC"));
+    assertTrue(query.sql().contains("AND (e.ts > ?2 OR (e.ts = ?3 AND e.id > ?4) OR e.ts IS NULL)"));
+    assertTrue(query.sql().contains("ORDER BY e.ts ASC NULLS LAST, e.id ASC"));
     assertEquals(List.of(ts, ts, 11L, 200), query.params());
   }
 
@@ -99,8 +102,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND (ts IS NULL AND id > ?2)"));
-    assertTrue(query.sql().contains("ORDER BY ts ASC NULLS LAST, id ASC"));
+    assertTrue(query.sql().contains("AND (e.ts IS NULL AND e.id > ?2)"));
+    assertTrue(query.sql().contains("ORDER BY e.ts ASC NULLS LAST, e.id ASC"));
     assertEquals(List.of(11L, 200), query.params());
   }
 
@@ -115,8 +118,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND (ts < ?2 OR (ts = ?3 AND id < ?4) OR ts IS NULL)"));
-    assertTrue(query.sql().contains("ORDER BY ts DESC NULLS LAST, id DESC"));
+    assertTrue(query.sql().contains("AND (e.ts < ?2 OR (e.ts = ?3 AND e.id < ?4) OR e.ts IS NULL)"));
+    assertTrue(query.sql().contains("ORDER BY e.ts DESC NULLS LAST, e.id DESC"));
     assertEquals(List.of(ts, ts, 11L, 200), query.params());
   }
 
@@ -130,8 +133,8 @@ class PreviewQueryBuilderTest {
         200
     );
 
-    assertTrue(query.sql().contains("AND (ts IS NULL AND id < ?2)"));
-    assertTrue(query.sql().contains("ORDER BY ts DESC NULLS LAST, id DESC"));
+    assertTrue(query.sql().contains("AND (e.ts IS NULL AND e.id < ?2)"));
+    assertTrue(query.sql().contains("ORDER BY e.ts DESC NULLS LAST, e.id DESC"));
     assertEquals(List.of(11L, 200), query.params());
   }
 }

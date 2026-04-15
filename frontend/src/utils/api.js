@@ -46,6 +46,10 @@ export function getCounts(payload) {
   });
 }
 
+export function getCountStatus(requestHash) {
+  return apiFetch(`/filters/count/${requestHash}`);
+}
+
 export function getPreview(payload) {
   return apiFetch("/filters/preview", {
     method: "POST",

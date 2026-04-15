@@ -1,8 +1,8 @@
 package com.jsonl.viewer.api;
 
+import com.jsonl.viewer.api.dto.EntryDetailResponse;
 import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterCountResponse;
-import com.jsonl.viewer.api.dto.EntryDetailResponse;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.api.dto.PreviewResponse;
 import com.jsonl.viewer.api.dto.PreviewRow;
@@ -13,28 +13,31 @@ import com.jsonl.viewer.ingest.IngestAdminService;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntryDetailRow;
-import com.jsonl.viewer.repo.JsonlEntryRow;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
-import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.Counts;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.PreviewCursor;
+import com.jsonl.viewer.repo.JsonlEntryRow;
+import com.jsonl.viewer.service.FilterCountCacheService;
+import com.jsonl.viewer.service.FilterCountCacheService.Snapshot;
 import com.jsonl.viewer.service.FilterCriteria;
+import com.jsonl.viewer.service.FilterRequestHasher;
 import com.jsonl.viewer.service.FilterService;
 import com.jsonl.viewer.service.PreviewCursorCodec;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 
 @RestController
 @RequestMapping("/api")
@@ -44,6 +47,8 @@ public class JsonlController {
   private final JsonlEntryRepository jsonlEntryRepository;
   private final IngestStateRepository ingestStateRepository;
   private final FilterService filterService;
+  private final FilterRequestHasher filterRequestHasher;
+  private final FilterCountCacheService filterCountCacheService;
   private final IngestAdminService ingestAdminService;
   private final PreviewCursorCodec previewCursorCodec;
 
@@ -53,6 +58,8 @@ public class JsonlController {
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
       FilterService filterService,
+      FilterRequestHasher filterRequestHasher,
+      FilterCountCacheService filterCountCacheService,
       IngestAdminService ingestAdminService,
       PreviewCursorCodec previewCursorCodec
   ) {
@@ -61,6 +68,8 @@ public class JsonlController {
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
     this.filterService = filterService;
+    this.filterRequestHasher = filterRequestHasher;
+    this.filterCountCacheService = filterCountCacheService;
     this.ingestAdminService = ingestAdminService;
     this.previewCursorCodec = previewCursorCodec;
   }
@@ -69,20 +78,21 @@ public class JsonlController {
   public StatsResponse stats() {
     String sourceId = sourceResolver.getActiveSourceId();
     if (sourceId == null) {
-      return new StatsResponse(null, properties.getJsonlTimestampField(), 0, 0, 0, null);
+      return new StatsResponse(null, properties.getJsonlTimestampField(), 0, 0, 0, null, 0, "ready");
     }
-    Counts counts = jsonlEntryRepository.getCounts(sourceId);
-    Instant lastIngest = ingestStateRepository.findById(sourceId)
-        .map(IngestState::getLastIngestedAt)
-        .orElse(null);
+
+    IngestState state = ingestStateRepository.findById(sourceId)
+        .orElse(new IngestState(sourceId, 0, 0, null));
 
     return new StatsResponse(
         sourceId,
         properties.getJsonlTimestampField(),
-        counts.total(),
-        counts.parsed(),
-        counts.errors(),
-        lastIngest
+        state.getTotalCount(),
+        state.getParsedCount(),
+        state.getErrorCount(),
+        state.getLastIngestedAt(),
+        state.getSourceRevision(),
+        computeSearchStatus(state)
     );
   }
 
@@ -90,16 +100,84 @@ public class JsonlController {
   public FilterCountResponse count(@RequestBody(required = false) FilterCountRequest request) {
     String sourceId = sourceResolver.getActiveSourceId();
     if (sourceId == null) {
-      return new FilterCountResponse(0, 0);
+      return new FilterCountResponse(
+          0,
+          0L,
+          FilterCountCacheService.STATUS_READY,
+          filterRequestHasher.hash(FilterService.FILTERS_OP_AND, List.of()),
+          0,
+          0L,
+          Instant.now()
+      );
     }
+
+    IngestState state = ingestStateRepository.findById(sourceId)
+        .orElse(new IngestState(sourceId, 0, 0, null));
     FilterCountRequest safeRequest = request == null ? new FilterCountRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
+    String normalizedFiltersOp = filterService.normalizeFiltersOp(safeRequest.getFiltersOp());
+    String requestHash = filterRequestHasher.hash(normalizedFiltersOp, filters);
+    long sourceRevision = state.getSourceRevision();
+    long totalCount = state.getTotalCount();
 
-    Counts counts = jsonlEntryRepository.getCounts(sourceId);
-    long matchCount = jsonlEntryRepository.countMatching(sourceId, filterSql);
+    if (filters.isEmpty()) {
+      return new FilterCountResponse(
+          totalCount,
+          totalCount,
+          FilterCountCacheService.STATUS_READY,
+          requestHash,
+          sourceRevision,
+          sourceRevision,
+          Instant.now()
+      );
+    }
 
-    return new FilterCountResponse(counts.total(), matchCount);
+    FilterSql filterSql = filterService.buildFilterSql(filters, normalizedFiltersOp);
+    Snapshot snapshot = filterCountCacheService.submitCountJob(
+        sourceId,
+        sourceRevision,
+        requestHash,
+        filterSql
+    );
+
+    return new FilterCountResponse(
+        totalCount,
+        snapshot.matchCount(),
+        snapshot.status(),
+        requestHash,
+        sourceRevision,
+        snapshot.computedRevision(),
+        snapshot.lastComputedAt()
+    );
+  }
+
+  @GetMapping("/filters/count/{requestHash}")
+  public FilterCountResponse countStatus(@PathVariable("requestHash") String requestHash) {
+    String sourceId = sourceResolver.getActiveSourceId();
+    if (sourceId == null) {
+      return new FilterCountResponse(
+          0,
+          null,
+          FilterCountCacheService.STATUS_PENDING,
+          requestHash,
+          0,
+          null,
+          null
+      );
+    }
+
+    IngestState state = ingestStateRepository.findById(sourceId)
+        .orElse(new IngestState(sourceId, 0, 0, null));
+    Snapshot snapshot = filterCountCacheService.getSnapshot(sourceId, state.getSourceRevision(), requestHash);
+    return new FilterCountResponse(
+        state.getTotalCount(),
+        snapshot.matchCount(),
+        snapshot.status(),
+        requestHash,
+        state.getSourceRevision(),
+        snapshot.computedRevision(),
+        snapshot.lastComputedAt()
+    );
   }
 
   @PostMapping("/filters/preview")
@@ -108,6 +186,7 @@ public class JsonlController {
     if (sourceId == null) {
       return new PreviewResponse(List.of(), null);
     }
+
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
     FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
@@ -117,7 +196,15 @@ public class JsonlController {
     PreviewCursor cursor = decodePreviewCursor(safeRequest.getCursor(), sortBy, sortDir);
     int limit = safeRequest.getLimit() == null ? 10 : Math.min(500, Math.max(1, safeRequest.getLimit()));
 
-    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(sourceId, filterSql, sortBy, sortDir, cursor, limit);
+    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(
+        sourceId,
+        filterSql,
+        sortBy,
+        sortDir,
+        cursor,
+        limit,
+        toMillis(properties.getPreviewStatementTimeout())
+    );
     List<PreviewRow> responseRows = rows.stream()
         .map(row -> new PreviewRow(
             row.id(),
@@ -176,6 +263,13 @@ public class JsonlController {
     return sourceId;
   }
 
+  private String computeSearchStatus(IngestState state) {
+    if (state.getIndexedRevision() < state.getSourceRevision()) {
+      return "building";
+    }
+    return "ready";
+  }
+
   private PreviewCursor decodePreviewCursor(String rawCursor, String sortBy, String sortDir) {
     try {
       return previewCursorCodec.decode(rawCursor, sortBy, sortDir);
@@ -215,5 +309,12 @@ public class JsonlController {
 
   private PreviewCursor toPreviewCursor(JsonlEntryRow row, String sortBy, String sortDir) {
     return new PreviewCursor(sortBy, sortDir, row.id(), row.lineNo(), row.ts());
+  }
+
+  private Long toMillis(Duration duration) {
+    if (duration == null || duration.isNegative() || duration.isZero()) {
+      return null;
+    }
+    return duration.toMillis();
   }
 }

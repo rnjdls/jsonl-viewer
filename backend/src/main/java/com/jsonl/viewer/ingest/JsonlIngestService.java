@@ -5,6 +5,7 @@ import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntry;
+import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import jakarta.persistence.EntityManager;
 import java.io.BufferedInputStream;
@@ -33,6 +34,7 @@ public class JsonlIngestService {
   private final JsonlEntryRepository jsonlEntryRepository;
   private final IngestStateRepository ingestStateRepository;
   private final JsonlEntryParser jsonlEntryParser;
+  private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
   private final EntityManager entityManager;
   private final ReentrantLock ingestLock = new ReentrantLock();
 
@@ -42,6 +44,7 @@ public class JsonlIngestService {
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
       JsonlEntryParser jsonlEntryParser,
+      JsonFieldIndexExtractor jsonFieldIndexExtractor,
       EntityManager entityManager
   ) {
     this.properties = properties;
@@ -49,6 +52,7 @@ public class JsonlIngestService {
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
     this.jsonlEntryParser = jsonlEntryParser;
+    this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
     this.entityManager = entityManager;
   }
 
@@ -84,8 +88,21 @@ public class JsonlIngestService {
       if (!Files.exists(path)) return;
 
       long size = Files.size(path);
+      IngestState state = ingestStateRepository.findById(sourceId)
+          .orElse(new IngestState(sourceId, 0, 0, null));
+
       jsonlEntryRepository.deleteByFilePath(sourceId);
-      saveIngestState(sourceId, size, 0, Instant.now());
+      state.setByteOffset(size);
+      state.setLineNo(0);
+      state.setLastIngestedAt(Instant.now());
+      state.setTotalCount(0);
+      state.setParsedCount(0);
+      state.setErrorCount(0);
+      long nextRevision = state.getSourceRevision() + 1;
+      state.setSourceRevision(nextRevision);
+      state.setIndexedRevision(nextRevision);
+      state.setIngestStatus("ready");
+      ingestStateRepository.save(state);
     } catch (IOException e) {
       log.warn("Failed to reset ingest state for {}: {}", sourceResolver.getFileReadPath(), e.getMessage());
     } finally {
@@ -118,20 +135,32 @@ public class JsonlIngestService {
 
       long offset = state.getByteOffset();
       long lineNo = state.getLineNo();
+      long totalCount = state.getTotalCount();
+      long parsedCount = state.getParsedCount();
+      long errorCount = state.getErrorCount();
       long startLineNo = lineNo;
+      boolean sourceMutated = false;
 
       long targetSize = Files.size(path);
       if (forceReset) {
         jsonlEntryRepository.deleteByFilePath(sourceId);
         offset = 0;
         lineNo = 0;
+        totalCount = 0;
+        parsedCount = 0;
+        errorCount = 0;
         startLineNo = 0;
+        sourceMutated = true;
       } else if (targetSize < offset) {
         log.info("File size shrank; resetting ingest state for {}", filePath);
         jsonlEntryRepository.deleteByFilePath(sourceId);
         offset = 0;
         lineNo = 0;
+        totalCount = 0;
+        parsedCount = 0;
+        errorCount = 0;
         startLineNo = 0;
+        sourceMutated = true;
       }
 
       if (!ingestNow && targetSize == offset) {
@@ -177,7 +206,17 @@ public class JsonlIngestService {
             String rawLine = new String(lineBytes, java.nio.charset.StandardCharsets.UTF_8).trim();
             if (!rawLine.isEmpty()) {
               lineNo++;
-              batch.add(parseLine(sourceId, lineNo, rawLine));
+              JsonlEntry parsedEntry = parseLine(sourceId, lineNo, rawLine);
+              batch.add(parsedEntry);
+              totalCount++;
+              if (parsedEntry.getParsed() != null) {
+                parsedCount++;
+              }
+              if (parsedEntry.getParseError() != null) {
+                errorCount++;
+              }
+              sourceMutated = true;
+
               if (batch.size() >= properties.getIngestBatchSize()) {
                 persistBatch(batch);
                 batch.clear();
@@ -199,14 +238,27 @@ public class JsonlIngestService {
       }
 
       if (buffer.size() > 0) {
-        // partial line: roll back to the start of the incomplete line
+        // Partial line: roll back to the start of the incomplete line.
         newOffset = cursor - buffer.size();
       } else {
         newOffset = cursor;
       }
 
-      if (newOffset != offset) {
-        saveIngestState(sourceId, newOffset, lineNo, Instant.now());
+      if (newOffset != offset || sourceMutated) {
+        state.setByteOffset(newOffset);
+        state.setLineNo(lineNo);
+        state.setLastIngestedAt(Instant.now());
+        state.setTotalCount(totalCount);
+        state.setParsedCount(parsedCount);
+        state.setErrorCount(errorCount);
+        if (sourceMutated) {
+          long nextRevision = state.getSourceRevision() + 1;
+          state.setSourceRevision(nextRevision);
+          state.setIndexedRevision(nextRevision);
+        }
+        state.setIngestStatus(state.getIndexedRevision() < state.getSourceRevision() ? "building" : "ready");
+        ingestStateRepository.save(state);
+
         if (log.isDebugEnabled()) {
           long elapsedMs = (System.nanoTime() - ingestStartNanos) / 1_000_000L;
           long bytesIngested = newOffset - offset;
@@ -230,23 +282,31 @@ public class JsonlIngestService {
   }
 
   private void persistBatch(List<JsonlEntry> batch) {
-    if (batch.isEmpty()) return;
+    if (batch.isEmpty()) {
+      return;
+    }
 
     for (JsonlEntry entry : batch) {
       entityManager.persist(entry);
     }
+    entityManager.flush();
+
+    for (JsonlEntry entry : batch) {
+      if (entry.getId() == null || entry.getParsed() == null) {
+        continue;
+      }
+      List<JsonlEntryFieldIndex> indexRows = jsonFieldIndexExtractor.extract(
+          entry.getFilePath(),
+          entry.getId(),
+          entry.getParsed()
+      );
+      for (JsonlEntryFieldIndex indexRow : indexRows) {
+        entityManager.persist(indexRow);
+      }
+    }
 
     entityManager.flush();
     entityManager.clear();
-  }
-
-  private void saveIngestState(String filePath, long byteOffset, long lineNo, Instant lastIngestedAt) {
-    IngestState state = ingestStateRepository.findById(filePath)
-        .orElse(new IngestState(filePath, 0, 0, null));
-    state.setByteOffset(byteOffset);
-    state.setLineNo(lineNo);
-    state.setLastIngestedAt(lastIngestedAt);
-    ingestStateRepository.save(state);
   }
 
   private JsonlEntry parseLine(String sourceId, long lineNo, String rawLine) {

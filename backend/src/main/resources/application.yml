@@ -6,12 +6,19 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jsonl}
     username: ${SPRING_DATASOURCE_USERNAME:jsonl}
     password: ${SPRING_DATASOURCE_PASSWORD:jsonl}
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
   sql:
     init:
       mode: never
+  mvc:
+    async:
+      request-timeout: ${SPRING_MVC_ASYNC_REQUEST_TIMEOUT:305s}
   jackson:
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
@@ -47,6 +54,8 @@ app:
   jsonl-timestamp-field: ${JSONL_TIMESTAMP_FIELD:timestamp}
   ingest-poll-interval-ms: ${INGEST_POLL_INTERVAL_MS:1000}
   ingest-batch-size: ${INGEST_BATCH_SIZE:500}
+  preview-statement-timeout: ${APP_PREVIEW_STATEMENT_TIMEOUT:20s}
+  count-job-statement-timeout: ${APP_COUNT_JOB_STATEMENT_TIMEOUT:10m}
   kafka:
     topic: ${KAFKA_TOPIC:}
     concurrency: ${KAFKA_CONCURRENCY:1}

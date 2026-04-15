@@ -5,6 +5,7 @@ import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntry;
+import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Duration;
@@ -43,6 +44,7 @@ public class KafkaIngestService {
   private final JsonlEntryRepository jsonlEntryRepository;
   private final IngestStateRepository ingestStateRepository;
   private final JsonlEntryParser jsonlEntryParser;
+  private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
   private final EntityManager entityManager;
   private final ConsumerFactory<String, String> consumerFactory;
   private final KafkaListenerEndpointRegistry listenerRegistry;
@@ -53,6 +55,7 @@ public class KafkaIngestService {
       JsonlEntryRepository jsonlEntryRepository,
       IngestStateRepository ingestStateRepository,
       JsonlEntryParser jsonlEntryParser,
+      JsonFieldIndexExtractor jsonFieldIndexExtractor,
       EntityManager entityManager,
       ConsumerFactory<String, String> consumerFactory,
       KafkaListenerEndpointRegistry listenerRegistry
@@ -62,6 +65,7 @@ public class KafkaIngestService {
     this.jsonlEntryRepository = jsonlEntryRepository;
     this.ingestStateRepository = ingestStateRepository;
     this.jsonlEntryParser = jsonlEntryParser;
+    this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
     this.entityManager = entityManager;
     this.consumerFactory = consumerFactory;
     this.listenerRegistry = listenerRegistry;
@@ -83,6 +87,10 @@ public class KafkaIngestService {
         .orElse(new IngestState(sourceId, 0, 0, null));
 
     long lineNo = state.getLineNo();
+    long totalCount = state.getTotalCount();
+    long parsedCount = state.getParsedCount();
+    long errorCount = state.getErrorCount();
+
     List<JsonlEntry> batch = new ArrayList<>();
     for (ConsumerRecord<String, String> record : records) {
       String rawLine = record.value();
@@ -96,19 +104,37 @@ public class KafkaIngestService {
 
       lineNo++;
       JsonlEntryParseResult parseResult = jsonlEntryParser.parse(rawLine);
-      batch.add(new JsonlEntry(
+      JsonlEntry entry = new JsonlEntry(
           sourceId,
           lineNo,
           rawLine,
           parseResult.parsed(),
           parseResult.parseError(),
           parseResult.ts()
-      ));
+      );
+      batch.add(entry);
+      totalCount++;
+      if (entry.getParsed() != null) {
+        parsedCount++;
+      }
+      if (entry.getParseError() != null) {
+        errorCount++;
+      }
     }
 
     if (!batch.isEmpty()) {
       persistBatch(batch);
-      saveIngestState(sourceId, 0, lineNo, Instant.now());
+      state.setByteOffset(0);
+      state.setLineNo(lineNo);
+      state.setLastIngestedAt(Instant.now());
+      state.setTotalCount(totalCount);
+      state.setParsedCount(parsedCount);
+      state.setErrorCount(errorCount);
+      long nextRevision = state.getSourceRevision() + 1;
+      state.setSourceRevision(nextRevision);
+      state.setIndexedRevision(nextRevision);
+      state.setIngestStatus("ready");
+      ingestStateRepository.save(state);
     }
   }
 
@@ -135,8 +161,20 @@ public class KafkaIngestService {
     stopContainer(container);
     try {
       seekAndCommit(topic, seekToEnd);
+      IngestState state = ingestStateRepository.findById(sourceId)
+          .orElse(new IngestState(sourceId, 0, 0, null));
       jsonlEntryRepository.deleteByFilePath(sourceId);
-      saveIngestState(sourceId, 0, 0, Instant.now());
+      state.setByteOffset(0);
+      state.setLineNo(0);
+      state.setLastIngestedAt(Instant.now());
+      state.setTotalCount(0);
+      state.setParsedCount(0);
+      state.setErrorCount(0);
+      long nextRevision = state.getSourceRevision() + 1;
+      state.setSourceRevision(nextRevision);
+      state.setIndexedRevision(nextRevision);
+      state.setIngestStatus("ready");
+      ingestStateRepository.save(state);
     } finally {
       if (restartContainer && container != null) {
         container.start();
@@ -199,16 +237,23 @@ public class KafkaIngestService {
       entityManager.persist(entry);
     }
     entityManager.flush();
-    entityManager.clear();
-  }
 
-  private void saveIngestState(String sourceId, long byteOffset, long lineNo, Instant lastIngestedAt) {
-    IngestState state = ingestStateRepository.findById(sourceId)
-        .orElse(new IngestState(sourceId, 0, 0, null));
-    state.setByteOffset(byteOffset);
-    state.setLineNo(lineNo);
-    state.setLastIngestedAt(lastIngestedAt);
-    ingestStateRepository.save(state);
+    for (JsonlEntry entry : batch) {
+      if (entry.getId() == null || entry.getParsed() == null) {
+        continue;
+      }
+      List<JsonlEntryFieldIndex> indexRows = jsonFieldIndexExtractor.extract(
+          entry.getFilePath(),
+          entry.getId(),
+          entry.getParsed()
+      );
+      for (JsonlEntryFieldIndex indexRow : indexRows) {
+        entityManager.persist(indexRow);
+      }
+    }
+
+    entityManager.flush();
+    entityManager.clear();
   }
 
   private String normalizeBlank(String value) {

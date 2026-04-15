@@ -7,7 +7,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Backend ingests a JSONL file from a configured path and tails new lines.
 - Optional Kafka ingest mode consumes one JSON object per Kafka message.
 - Postgres storage for parsed JSON and raw lines.
-- Count-first UI: shows total and matching counts without rendering all rows.
+- Count-first UI: returns immediate totals and deferred exact match counts for heavy filters.
 - Lazy preview with keyset pagination ("Load Preview" with Next/Prev paging).
 - Field contains filter (JSON key searched anywhere in the JSON tree), full-text search over parsed JSON, and timestamp range filter.
 - Admin actions: reload file from start, delete all ingested rows.
@@ -87,6 +87,9 @@ Backend environment variables (Docker Compose defaults shown in `docker-compose.
 - `JSONL_TIMESTAMP_FIELD` (default: `timestamp`): dot-path to a timestamp field.
 - `INGEST_POLL_INTERVAL_MS` (default: `1000`): polling interval in ms.
 - `INGEST_BATCH_SIZE` (default: `500`): insert batch size.
+- `APP_PREVIEW_STATEMENT_TIMEOUT` (default: `20s`): statement timeout for preview queries.
+- `APP_COUNT_JOB_STATEMENT_TIMEOUT` (default: `10m`): statement timeout for background exact-count jobs.
+- `SPRING_MVC_ASYNC_REQUEST_TIMEOUT` (default: `305s`): async MVC request timeout guardrail.
 
 Kafka (required when `INGEST_MODE=kafka`):
 
@@ -132,21 +135,32 @@ Database:
 - `SPRING_DATASOURCE_URL` (default: `jdbc:postgresql://db:5432/jsonl`)
 - `SPRING_DATASOURCE_USERNAME` (default: `jsonl`)
 - `SPRING_DATASOURCE_PASSWORD` (default: `jsonl`)
-- `spring.jpa.hibernate.ddl-auto=update` (schema managed by JPA/Hibernate)
+- `spring.jpa.hibernate.ddl-auto=validate` (schema validated at startup)
+- `spring.flyway.enabled=true` (schema managed by Flyway migrations)
 - `spring.sql.init.mode=never` (SQL init disabled)
+
+Frontend nginx proxy timeout env vars:
+
+- `API_PROXY_CONNECT_TIMEOUT` (default: `30s`)
+- `API_PROXY_SEND_TIMEOUT` (default: `300s`)
+- `API_PROXY_READ_TIMEOUT` (default: `300s`)
 
 ## API Endpoints
 
 - `GET /api/stats`
-  - Returns source id (`filePath` field for backward compatibility), counts, timestamp field, and last ingestion time.
+  - Returns source id (`filePath`), counts from ingest state, timestamp field, last ingestion time, `sourceRevision`, and `searchStatus` (`ready|building`).
 
 - `POST /api/filters/count`
   - Body: `{ filters: [ { type, fieldPath, valueContains, query, from, to } ] }`
   - For `type: "field"`, `fieldPath` is treated as a key name and matched anywhere in the JSON tree (not dot-path syntax).
-  - For `type: "text"`, `query` is matched with Postgres full-text search over `parsed::text`:
-    `to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', query)`.
+  - For `type: "text"`, `query` is matched with Postgres full-text search over `parsed::text`.
   - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
-  - Returns `{ totalCount, matchCount }`
+  - Returns `{ totalCount, matchCount, status, requestHash, sourceRevision, computedRevision, lastComputedAt }`
+  - `status` is `pending|ready`; `matchCount` is `null` while pending.
+
+- `GET /api/filters/count/{requestHash}`
+  - Polls deferred exact-count completion for a prior `POST /api/filters/count`.
+  - Returns the same shape as `POST /api/filters/count`.
 
 - `POST /api/filters/preview`
   - Body: `{ filters: [...], sortBy, sortDir, cursor, limit }`
@@ -184,7 +198,7 @@ Database:
 
 ## Data Model
 
-Tables are generated/updated via JPA annotations (`ddl-auto=update`).
+Tables are managed via Flyway migrations.
 
 - `jsonl_entry`
   - `id BIGSERIAL PRIMARY KEY`
@@ -205,13 +219,28 @@ Ingest behavior note:
   - `byte_offset BIGINT`
   - `line_no BIGINT`
   - `last_ingested_at TIMESTAMPTZ`
+  - `total_count BIGINT`
+  - `parsed_count BIGINT`
+  - `error_count BIGINT`
+  - `source_revision BIGINT`
+  - `indexed_revision BIGINT`
+  - `ingest_status TEXT`
+
+- `jsonl_entry_field_index`
+  - one row per JSON key occurrence
+  - `entry_id`, `file_path`, `field_key`, `value_text`, `value_type`, `is_null`, `is_empty`
+
+- `filter_count_cache`
+  - keyed by `(file_path, request_hash)`
+  - stores deferred exact-count status and computed revision metadata
 
 Indexes
 - `jsonl_entry(file_path, id)` for keyset pagination
 - `jsonl_entry(file_path, line_no, id)` for line sort pagination
 - `jsonl_entry(file_path, ts)` for timestamp filtering
-- Optional full-text index for larger datasets:
-  `CREATE INDEX jsonl_entry_parsed_fts_idx ON jsonl_entry USING GIN (to_tsvector('simple', parsed::text));`
+- `jsonl_entry_parsed_fts_idx` on `to_tsvector('simple', parsed::text)`
+- `jsonl_entry_field_index` btree indexes for key/null/empty lookups
+- `jsonl_entry_field_index` trigram GIN index on `value_text`
 
 ## Performance Notes
 

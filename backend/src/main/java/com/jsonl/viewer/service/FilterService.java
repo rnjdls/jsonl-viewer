@@ -41,13 +41,12 @@ public class FilterService {
 
   public FilterSql buildFilterSql(List<FilterCriteria> filters, String filtersOp) {
     if (filters == null || filters.isEmpty()) {
-      return new FilterSql("WHERE file_path = ?1", List.of());
+      return new FilterSql("SELECT id FROM jsonl_entry WHERE file_path = ?1", List.of());
     }
 
-    List<String> conditions = new ArrayList<>();
+    List<String> candidateIdQueries = new ArrayList<>();
     List<Object> params = new ArrayList<>();
     int nextParamIndex = 2;
-    boolean hasTextFilter = false;
     boolean useOrMode = FILTERS_OP_OR.equals(normalizeFiltersOp(filtersOp));
 
     for (FilterCriteria filter : filters) {
@@ -57,54 +56,68 @@ public class FilterService {
         if (fieldKey.isEmpty()) continue;
         String op = normalizeFieldOp(filter.op());
         String value = filter.valueContains() == null ? "" : filter.valueContains();
-        conditions.add(buildFieldFilterCondition(op, nextParamIndex));
-        params.add(fieldKey);
+
+        StringBuilder query = new StringBuilder(
+            "SELECT DISTINCT entry_id AS id FROM jsonl_entry_field_index " +
+                "WHERE file_path = ?1 AND field_key = ?" + nextParamIndex
+        );
         params.add(fieldKey);
         if (FIELD_OP_CONTAINS.equals(op)) {
+          query.append(" AND value_text ILIKE ?").append(nextParamIndex + 1);
           params.add("%" + value + "%");
-          nextParamIndex += 3;
-        } else {
           nextParamIndex += 2;
+        } else if (FIELD_OP_NULL.equals(op)) {
+          query.append(" AND is_null = TRUE");
+          nextParamIndex += 1;
+        } else if (FIELD_OP_NOT_NULL.equals(op)) {
+          query.append(" AND is_null = FALSE");
+          nextParamIndex += 1;
+        } else if (FIELD_OP_EMPTY.equals(op)) {
+          query.append(" AND is_empty = TRUE");
+          nextParamIndex += 1;
+        } else {
+          query.append(" AND is_empty = FALSE AND is_null = FALSE");
+          nextParamIndex += 1;
         }
+        candidateIdQueries.add(query.toString());
       } else if (filter.type().equalsIgnoreCase("text")) {
         String query = safeTrim(filter.query());
         if (query.isEmpty()) continue;
-        hasTextFilter = true;
-        conditions.add(
-            "to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', ?" + nextParamIndex + ")"
+        candidateIdQueries.add(
+            "SELECT id FROM jsonl_entry " +
+                "WHERE file_path = ?1 AND parsed IS NOT NULL " +
+                "AND to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', ?" + nextParamIndex + ")"
         );
         params.add(query);
         nextParamIndex++;
       } else if (filter.type().equalsIgnoreCase("timestamp")) {
+        List<String> tsPredicates = new ArrayList<>();
         if (filter.from() != null) {
-          conditions.add("ts >= ?" + nextParamIndex);
+          tsPredicates.add("ts >= ?" + nextParamIndex);
           params.add(filter.from());
           nextParamIndex++;
         }
         if (filter.to() != null) {
-          conditions.add("ts <= ?" + nextParamIndex);
+          tsPredicates.add("ts <= ?" + nextParamIndex);
           params.add(filter.to());
           nextParamIndex++;
+        }
+        if (!tsPredicates.isEmpty()) {
+          candidateIdQueries.add(
+              "SELECT id FROM jsonl_entry WHERE file_path = ?1 AND "
+                  + String.join(" AND ", tsPredicates)
+          );
         }
       }
     }
 
-    if (conditions.isEmpty()) {
-      return new FilterSql("WHERE file_path = ?1", List.of());
+    if (candidateIdQueries.isEmpty()) {
+      return new FilterSql("SELECT id FROM jsonl_entry WHERE file_path = ?1", List.of());
     }
 
-    String conditionJoin = useOrMode ? " OR " : " AND ";
-    String combinedConditions = String.join(conditionJoin, conditions);
-    if (useOrMode) {
-      combinedConditions = "(" + combinedConditions + ")";
-    }
-
-    String where = hasTextFilter
-        ? "WHERE file_path = ?1 AND parsed IS NOT NULL AND " + combinedConditions
-        : "WHERE file_path = ?1 AND (parsed IS NULL OR (parsed IS NOT NULL AND "
-            + combinedConditions + "))";
-
-    return new FilterSql(where, params);
+    String setOperator = useOrMode ? " UNION " : " INTERSECT ";
+    String candidateIdsSql = String.join(setOperator, candidateIdQueries);
+    return new FilterSql(candidateIdsSql, params);
   }
 
   public String normalizeFiltersOp(String rawFiltersOp) {
@@ -164,47 +177,6 @@ public class FilterService {
     }
 
     return result;
-  }
-
-  private String buildFieldFilterCondition(String op, int fieldKeyParamIndex) {
-    int extractPathParamIndex = fieldKeyParamIndex + 1;
-    String extractedValue = "jsonb_extract_path(node.value, ?" + extractPathParamIndex + ")";
-    String opPredicate = buildFieldOpPredicate(op, extractedValue, fieldKeyParamIndex);
-    return "EXISTS (" +
-        "SELECT 1 FROM (" +
-        "  SELECT parsed AS value " +
-        "  UNION ALL " +
-        "  SELECT node.value FROM jsonb_path_query(parsed, '$.**') AS node(value)" +
-        ") AS node " +
-        "WHERE jsonb_typeof(node.value) = 'object' " +
-        "AND jsonb_exists(node.value, ?" + fieldKeyParamIndex + ") " +
-        "AND " + opPredicate +
-        ")";
-  }
-
-  private String buildFieldOpPredicate(String op, String extractedValue, int fieldKeyParamIndex) {
-    if (FIELD_OP_NULL.equals(op)) {
-      return "jsonb_typeof(" + extractedValue + ") = 'null'";
-    }
-    if (FIELD_OP_NOT_NULL.equals(op)) {
-      return "jsonb_typeof(" + extractedValue + ") <> 'null'";
-    }
-    if (FIELD_OP_EMPTY.equals(op)) {
-      return "(" +
-          "(jsonb_typeof(" + extractedValue + ") = 'string' AND " + extractedValue + " = '\"\"'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'array' AND " + extractedValue + " = '[]'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'object' AND " + extractedValue + " = '{}'::jsonb)" +
-          ")";
-    }
-    if (FIELD_OP_NOT_EMPTY.equals(op)) {
-      return "(" +
-          "(jsonb_typeof(" + extractedValue + ") = 'string' AND " + extractedValue + " <> '\"\"'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'array' AND " + extractedValue + " <> '[]'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") = 'object' AND " + extractedValue + " <> '{}'::jsonb) " +
-          "OR (jsonb_typeof(" + extractedValue + ") IN ('number','boolean'))" +
-          ")";
-    }
-    return extractedValue + "::text ILIKE ?" + (fieldKeyParamIndex + 2);
   }
 
   private String normalizeFieldOp(String rawOp) {

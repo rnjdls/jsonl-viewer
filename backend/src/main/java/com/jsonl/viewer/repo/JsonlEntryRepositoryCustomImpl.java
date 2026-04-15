@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import org.postgresql.util.PGobject;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCustom {
@@ -26,36 +27,27 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
   }
 
   @Override
-  public Counts getCounts(String filePath) {
-    Query query = entityManager.createNativeQuery(
-        "SELECT COUNT(*) AS total, " +
-            "COUNT(*) FILTER (WHERE parsed IS NOT NULL) AS parsed_count, " +
-            "COUNT(*) FILTER (WHERE parse_error IS NOT NULL) AS error_count " +
-            "FROM jsonl_entry WHERE file_path = ?1"
-    );
-    query.setParameter(1, filePath);
-
-    Object[] row = (Object[]) query.getSingleResult();
-    return new Counts(asLong(row[0]), asLong(row[1]), asLong(row[2]));
-  }
-
-  @Override
-  public long countMatching(String filePath, FilterSql filterSql) {
-    String sql = "SELECT COUNT(*) FROM jsonl_entry " + filterSql.whereClause();
+  @Transactional(readOnly = true)
+  public long countMatching(String filePath, FilterSql filterSql, Long statementTimeoutMs) {
+    applyStatementTimeout(statementTimeoutMs);
+    String sql = "SELECT COUNT(*) FROM (" + filterSql.candidateIdsSql() + ") candidate_ids";
     Query query = entityManager.createNativeQuery(sql);
     bindFilterQueryParameters(query, filePath, filterSql.params());
     return asLong(query.getSingleResult());
   }
 
   @Override
+  @Transactional(readOnly = true)
   public List<JsonlEntryRow> preview(
       String filePath,
       FilterSql filterSql,
       String sortBy,
       String sortDir,
       PreviewCursor cursor,
-      int limit
+      int limit,
+      Long statementTimeoutMs
   ) {
+    applyStatementTimeout(statementTimeoutMs);
     PreviewQuery previewQuery = PreviewQueryBuilder.build(filterSql, sortBy, sortDir, cursor, limit);
     Query query = entityManager.createNativeQuery(previewQuery.sql());
     bindFilterQueryParameters(query, filePath, filterSql.params());
@@ -120,6 +112,13 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     }
     Object row = rows.get(0);
     return Optional.ofNullable(row == null ? null : row.toString());
+  }
+
+  private void applyStatementTimeout(Long statementTimeoutMs) {
+    if (statementTimeoutMs == null || statementTimeoutMs <= 0) {
+      return;
+    }
+    entityManager.createNativeQuery("SET LOCAL statement_timeout = " + statementTimeoutMs).executeUpdate();
   }
 
   private void bindFilterQueryParameters(Query query, String filePath, List<Object> filterParams) {

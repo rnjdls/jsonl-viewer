@@ -16,10 +16,12 @@ final class PreviewQueryBuilder {
 
   static PreviewQuery build(FilterSql filterSql, String sortBy, String sortDir, PreviewCursor cursor, int limit) {
     StringBuilder sql = new StringBuilder(
-        "SELECT id, line_no, ts, parsed->'key', parsed->'headers', parse_error, " +
-            "CASE WHEN parse_error IS NOT NULL THEN LEFT(raw_line, 500) ELSE NULL END AS raw_snippet, " +
-            "CASE WHEN parse_error IS NOT NULL THEN LENGTH(raw_line) > 500 ELSE NULL END AS raw_truncated " +
-            "FROM jsonl_entry " + filterSql.whereClause() + " "
+        "SELECT e.id, e.line_no, e.ts, e.parsed->'key', e.parsed->'headers', e.parse_error, " +
+            "CASE WHEN e.parse_error IS NOT NULL THEN LEFT(e.raw_line, 500) ELSE NULL END AS raw_snippet, " +
+            "CASE WHEN e.parse_error IS NOT NULL THEN LENGTH(e.raw_line) > 500 ELSE NULL END AS raw_truncated " +
+            "FROM jsonl_entry e " +
+            "JOIN (" + filterSql.candidateIdsSql() + ") candidate_ids ON candidate_ids.id = e.id " +
+            "WHERE e.file_path = ?1 "
     );
     List<Object> queryParams = new ArrayList<>();
     int nextParamIndex = filterSql.params().size() + 2;
@@ -45,7 +47,7 @@ final class PreviewQueryBuilder {
   ) {
     switch (sortBy) {
       case SORT_BY_ID:
-        sql.append("AND id ").append(isAsc(sortDir) ? ">" : "<").append(" ?").append(nextParamIndex).append(" ");
+        sql.append("AND e.id ").append(isAsc(sortDir) ? ">" : "<").append(" ?").append(nextParamIndex).append(" ");
         queryParams.add(cursor.id());
         return nextParamIndex + 1;
       case SORT_BY_LINE_NO:
@@ -65,9 +67,9 @@ final class PreviewQueryBuilder {
       PreviewCursor cursor
   ) {
     String op = isAsc(sortDir) ? ">" : "<";
-    sql.append("AND (line_no ").append(op).append(" ?").append(nextParamIndex)
-        .append(" OR (line_no = ?").append(nextParamIndex + 1)
-        .append(" AND id ").append(op).append(" ?").append(nextParamIndex + 2).append(")) ");
+    sql.append("AND (e.line_no ").append(op).append(" ?").append(nextParamIndex)
+        .append(" OR (e.line_no = ?").append(nextParamIndex + 1)
+        .append(" AND e.id ").append(op).append(" ?").append(nextParamIndex + 2).append(")) ");
     queryParams.add(cursor.lineNo());
     queryParams.add(cursor.lineNo());
     queryParams.add(cursor.id());
@@ -84,17 +86,18 @@ final class PreviewQueryBuilder {
     boolean asc = isAsc(sortDir);
     if (cursor.ts() != null) {
       String op = asc ? ">" : "<";
-      sql.append("AND (ts ").append(op).append(" ?").append(nextParamIndex)
-          .append(" OR (ts = ?").append(nextParamIndex + 1)
-          .append(" AND id ").append(op).append(" ?").append(nextParamIndex + 2)
-          .append(") OR ts IS NULL) ");
+      sql.append("AND (e.ts ").append(op).append(" ?").append(nextParamIndex)
+          .append(" OR (e.ts = ?").append(nextParamIndex + 1)
+          .append(" AND e.id ").append(op).append(" ?").append(nextParamIndex + 2)
+          .append(") OR e.ts IS NULL) ");
       queryParams.add(cursor.ts());
       queryParams.add(cursor.ts());
       queryParams.add(cursor.id());
       return nextParamIndex + 3;
     }
 
-    sql.append("AND (ts IS NULL AND id ").append(asc ? ">" : "<").append(" ?").append(nextParamIndex).append(") ");
+    sql.append("AND (e.ts IS NULL AND e.id ").append(asc ? ">" : "<")
+        .append(" ?").append(nextParamIndex).append(") ");
     queryParams.add(cursor.id());
     return nextParamIndex + 1;
   }
@@ -102,9 +105,9 @@ final class PreviewQueryBuilder {
   private static String orderBy(String sortBy, String sortDir) {
     String direction = isAsc(sortDir) ? "ASC" : "DESC";
     return switch (sortBy) {
-      case SORT_BY_ID -> "id " + direction;
-      case SORT_BY_LINE_NO -> "line_no " + direction + ", id " + direction;
-      case SORT_BY_TIMESTAMP -> "ts " + direction + " NULLS LAST, id " + direction;
+      case SORT_BY_ID -> "e.id " + direction;
+      case SORT_BY_LINE_NO -> "e.line_no " + direction + ", e.id " + direction;
+      case SORT_BY_TIMESTAMP -> "e.ts " + direction + " NULLS LAST, e.id " + direction;
       default -> throw new IllegalArgumentException("Unsupported sortBy: " + sortBy);
     };
   }

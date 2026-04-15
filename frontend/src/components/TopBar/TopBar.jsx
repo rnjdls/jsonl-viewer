@@ -12,6 +12,8 @@ import "./TopBar.css";
  *   parsedCount: number,
  *   errorCount: number,
  *   timestampField: string | null,
+ *   sourceRevision: number,
+ *   searchStatus: string,
  *   onReload: () => void,
  *   onReset: () => void,
  *   resetLoading: boolean,
@@ -25,6 +27,8 @@ export function TopBar({
   parsedCount,
   errorCount,
   timestampField,
+  sourceRevision,
+  searchStatus,
   onReload,
   onReset,
   resetLoading,
@@ -75,6 +79,12 @@ export function TopBar({
             ts: <strong>{timestampField}</strong>
           </span>
         )}
+        <span className="topbar-chip">
+          rev <strong>{sourceRevision}</strong>
+        </span>
+        <span className="topbar-chip">
+          search <strong>{searchStatus}</strong>
+        </span>
         {lastIngestedAt && (
           <span className="topbar-chip">
             updated <strong>{new Date(lastIngestedAt).toLocaleTimeString()}</strong>

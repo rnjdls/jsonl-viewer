@@ -22,13 +22,52 @@ public class IngestState {
   @Column(name = "last_ingested_at")
   private Instant lastIngestedAt;
 
+  @Column(name = "total_count", nullable = false)
+  private long totalCount = 0L;
+
+  @Column(name = "parsed_count", nullable = false)
+  private long parsedCount = 0L;
+
+  @Column(name = "error_count", nullable = false)
+  private long errorCount = 0L;
+
+  @Column(name = "source_revision", nullable = false)
+  private long sourceRevision = 0L;
+
+  @Column(name = "indexed_revision", nullable = false)
+  private long indexedRevision = 0L;
+
+  @Column(name = "ingest_status", nullable = false)
+  private String ingestStatus = "ready";
+
   public IngestState() {}
 
   public IngestState(String filePath, long byteOffset, long lineNo, Instant lastIngestedAt) {
+    this(filePath, byteOffset, lineNo, lastIngestedAt, 0, 0, 0, 0, 0, "ready");
+  }
+
+  public IngestState(
+      String filePath,
+      long byteOffset,
+      long lineNo,
+      Instant lastIngestedAt,
+      long totalCount,
+      long parsedCount,
+      long errorCount,
+      long sourceRevision,
+      long indexedRevision,
+      String ingestStatus
+  ) {
     this.filePath = filePath;
     this.byteOffset = byteOffset;
     this.lineNo = lineNo;
     this.lastIngestedAt = lastIngestedAt;
+    this.totalCount = totalCount;
+    this.parsedCount = parsedCount;
+    this.errorCount = errorCount;
+    this.sourceRevision = sourceRevision;
+    this.indexedRevision = indexedRevision;
+    this.ingestStatus = ingestStatus;
   }
 
   public String getFilePath() {
@@ -61,5 +100,53 @@ public class IngestState {
 
   public void setLastIngestedAt(Instant lastIngestedAt) {
     this.lastIngestedAt = lastIngestedAt;
+  }
+
+  public long getTotalCount() {
+    return totalCount;
+  }
+
+  public void setTotalCount(long totalCount) {
+    this.totalCount = totalCount;
+  }
+
+  public long getParsedCount() {
+    return parsedCount;
+  }
+
+  public void setParsedCount(long parsedCount) {
+    this.parsedCount = parsedCount;
+  }
+
+  public long getErrorCount() {
+    return errorCount;
+  }
+
+  public void setErrorCount(long errorCount) {
+    this.errorCount = errorCount;
+  }
+
+  public long getSourceRevision() {
+    return sourceRevision;
+  }
+
+  public void setSourceRevision(long sourceRevision) {
+    this.sourceRevision = sourceRevision;
+  }
+
+  public long getIndexedRevision() {
+    return indexedRevision;
+  }
+
+  public void setIndexedRevision(long indexedRevision) {
+    this.indexedRevision = indexedRevision;
+  }
+
+  public String getIngestStatus() {
+    return ingestStatus;
+  }
+
+  public void setIngestStatus(String ingestStatus) {
+    this.ingestStatus = ingestStatus;
   }
 }
