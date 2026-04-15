@@ -30,7 +30,6 @@ import { FIELD_FILTER_OP } from "./constants";
 import "./App.css";
 
 const DEFAULT_PREVIEW_LIMIT = 10;
-const DEFAULT_SORT_BY = "timestamp";
 const DEFAULT_SORT_DIR = "desc";
 const LOCAL_STORAGE_TIMEZONE_KEY = "jsonlLive.timeZone";
 const ADMIN_ACTION = {
@@ -108,7 +107,6 @@ export default function App() {
   const [pendingCountRequestHash, setPendingCountRequestHash] = useState(null);
   const [previewRows, setPreviewRows] = useState([]);
   const [previewLimit, setPreviewLimit] = useState(DEFAULT_PREVIEW_LIMIT);
-  const [previewSortBy, setPreviewSortBy] = useState(DEFAULT_SORT_BY);
   const [previewSortDir, setPreviewSortDir] = useState(DEFAULT_SORT_DIR);
   const [cursorHistory, setCursorHistory] = useState([null]);
   const [pageIndex, setPageIndex] = useState(0);
@@ -339,11 +337,10 @@ export default function App() {
       getPreview({
         ...filterPayload,
         cursor,
-        sortBy: previewSortBy,
         sortDir: previewSortDir,
         limit: previewLimit,
       }),
-    [filterPayload, previewLimit, previewSortBy, previewSortDir]
+    [filterPayload, previewLimit, previewSortDir]
   );
 
   const fetchPreviewPage = useCallback(
@@ -426,16 +423,6 @@ export default function App() {
       await fetchPreviewPage(targetCursor ?? null, targetPageIndex, workingHistory);
     },
     [cursorHistory, fetchPreviewPage, pageIndex, previewActive, requestPreviewPage, uiLocked]
-  );
-
-  const handleSortByChange = useCallback(
-    (event) => {
-      if (uiLocked) return;
-      const nextSortBy = event.target.value;
-      setPreviewSortBy(nextSortBy);
-      resetPreviewState();
-    },
-    [resetPreviewState, uiLocked]
   );
 
   const handleSortDirChange = useCallback(
@@ -716,19 +703,6 @@ export default function App() {
                     <option value={100}>100</option>
                     <option value={200}>200</option>
                     <option value={500}>500</option>
-                  </select>
-                </label>
-                <label className="preview-sort-label">
-                  Sort by
-                  <select
-                    className="preview-select"
-                    value={previewSortBy}
-                    onChange={handleSortByChange}
-                    disabled={uiLocked || previewLoading}
-                  >
-                    <option value="timestamp">Timestamp</option>
-                    <option value="lineNo">Line</option>
-                    <option value="id">ID</option>
                   </select>
                 </label>
                 <label className="preview-sort-label">

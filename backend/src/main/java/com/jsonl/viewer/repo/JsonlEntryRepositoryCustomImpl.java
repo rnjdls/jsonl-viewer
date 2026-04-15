@@ -41,9 +41,7 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
   public List<JsonlEntryRow> preview(
       String filePath,
       FilterSql filterSql,
-      String sortBy,
       String sortDir,
-      String timestampFieldPath,
       PreviewCursor cursor,
       int limit,
       Long statementTimeoutMs
@@ -51,9 +49,7 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     applyStatementTimeout(statementTimeoutMs);
     PreviewQuery previewQuery = PreviewQueryBuilder.build(
         filterSql,
-        sortBy,
         sortDir,
-        timestampFieldPath,
         cursor,
         limit
     );

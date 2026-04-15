@@ -198,4 +198,22 @@ describe("App admin confirmations and lock", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "+ Field" })).toBeEnabled();
   });
+
+  it("does not render sort-by control and omits sortBy from preview requests", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+
+    expect(screen.queryByLabelText("Sort by")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Load Preview" }));
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    const previewPayload = api.getPreview.mock.calls[0][0];
+    expect(Object.prototype.hasOwnProperty.call(previewPayload, "sortBy")).toBe(false);
+    expect(previewPayload.sortDir).toBe("desc");
+  });
 });
