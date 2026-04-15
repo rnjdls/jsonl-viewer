@@ -4,11 +4,7 @@ import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterSpec;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -16,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class FilterService {
-  private static final long EPOCH_MILLIS_THRESHOLD = 1_000_000_000_000L;
+  public static final String DEFAULT_TIMESTAMP_FIELD_PATH = "timestamp";
   public static final String FILTERS_OP_AND = "and";
   public static final String FILTERS_OP_OR = "or";
   private static final String FIELD_OP_CONTAINS = "contains";
@@ -91,23 +87,29 @@ public class FilterService {
         params.add(query);
         nextParamIndex++;
       } else if (filter.type().equalsIgnoreCase("timestamp")) {
-        List<String> tsPredicates = new ArrayList<>();
+        if (filter.from() == null && filter.to() == null) {
+          continue;
+        }
+
+        String tsFieldPath = normalizeTimestampFieldPath(filter.fieldPath());
+        StringBuilder query = new StringBuilder(
+            "SELECT DISTINCT entry_id AS id FROM jsonl_entry_field_index " +
+                "WHERE file_path = ?1 AND field_path = ?" + nextParamIndex
+        );
+        params.add(tsFieldPath);
+        nextParamIndex++;
+
         if (filter.from() != null) {
-          tsPredicates.add("ts >= ?" + nextParamIndex);
+          query.append(" AND value_ts >= ?").append(nextParamIndex);
           params.add(filter.from());
           nextParamIndex++;
         }
         if (filter.to() != null) {
-          tsPredicates.add("ts <= ?" + nextParamIndex);
+          query.append(" AND value_ts <= ?").append(nextParamIndex);
           params.add(filter.to());
           nextParamIndex++;
         }
-        if (!tsPredicates.isEmpty()) {
-          candidateIdQueries.add(
-              "SELECT id FROM jsonl_entry WHERE file_path = ?1 AND "
-                  + String.join(" AND ", tsPredicates)
-          );
-        }
+        candidateIdQueries.add(query.toString());
       }
     }
 
@@ -155,10 +157,11 @@ public class FilterService {
             result.add(new FilterCriteria(type, null, null, null, query, null, null));
           }
         } else if (type.equalsIgnoreCase("timestamp")) {
-          Instant from = parseInstant(spec.getFrom());
-          Instant to = parseInstant(spec.getTo());
-          if (from != null || to != null) {
-            result.add(new FilterCriteria(type, spec.getFieldPath(), null, null, null, from, to));
+          Instant from = TimestampParser.parse(spec.getFrom());
+          Instant to = TimestampParser.parse(spec.getTo());
+          String tsFieldPath = safeTrim(spec.getFieldPath());
+          if (from != null || to != null || !tsFieldPath.isEmpty()) {
+            result.add(new FilterCriteria(type, tsFieldPath, null, null, null, from, to));
           }
         }
       }
@@ -170,13 +173,18 @@ public class FilterService {
       result.add(new FilterCriteria("field", trimmedField, FIELD_OP_CONTAINS, valueContains, null, null, null));
     }
 
-    Instant from = parseInstant(timestampFrom);
-    Instant to = parseInstant(timestampTo);
+    Instant from = TimestampParser.parse(timestampFrom);
+    Instant to = TimestampParser.parse(timestampTo);
     if (from != null || to != null) {
-      result.add(new FilterCriteria("timestamp", null, null, null, null, from, to));
+      result.add(new FilterCriteria("timestamp", DEFAULT_TIMESTAMP_FIELD_PATH, null, null, null, from, to));
     }
 
     return result;
+  }
+
+  public String normalizeTimestampFieldPath(String rawFieldPath) {
+    String trimmed = safeTrim(rawFieldPath);
+    return trimmed.isEmpty() ? DEFAULT_TIMESTAMP_FIELD_PATH : trimmed;
   }
 
   private String normalizeFieldOp(String rawOp) {
@@ -192,68 +200,5 @@ public class FilterService {
 
   private String safeTrim(String value) {
     return value == null ? "" : value.trim();
-  }
-
-  private Instant parseInstant(String raw) {
-    String trimmed = safeTrim(raw);
-    if (trimmed.isEmpty()) return null;
-
-    Instant epochInstant = parseEpoch(trimmed);
-    if (epochInstant != null) return epochInstant;
-
-    Instant instant = parseAsInstant(trimmed);
-    if (instant != null) return instant;
-
-    Instant offsetDateTimeInstant = parseAsOffsetDateTime(trimmed);
-    if (offsetDateTimeInstant != null) return offsetDateTimeInstant;
-
-    Instant localDateTimeInstant = parseAsLocalDateTimeUtc(trimmed);
-    if (localDateTimeInstant != null) return localDateTimeInstant;
-
-    int firstSpace = trimmed.indexOf(' ');
-    if (firstSpace > 0 && firstSpace == trimmed.lastIndexOf(' ')) {
-      String withT = trimmed.substring(0, firstSpace) + "T" + trimmed.substring(firstSpace + 1);
-      Instant retriedOffsetDateTime = parseAsOffsetDateTime(withT);
-      if (retriedOffsetDateTime != null) return retriedOffsetDateTime;
-      return parseAsLocalDateTimeUtc(withT);
-    }
-
-    return null;
-  }
-
-  private Instant parseEpoch(String raw) {
-    if (!raw.matches("^[+-]?\\d+$")) return null;
-    try {
-      long epochValue = Long.parseLong(raw);
-      return epochValue > EPOCH_MILLIS_THRESHOLD
-          ? Instant.ofEpochMilli(epochValue)
-          : Instant.ofEpochSecond(epochValue);
-    } catch (NumberFormatException ignored) {
-      return null;
-    }
-  }
-
-  private Instant parseAsInstant(String raw) {
-    try {
-      return Instant.parse(raw);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
-  }
-
-  private Instant parseAsOffsetDateTime(String raw) {
-    try {
-      return OffsetDateTime.parse(raw).toInstant();
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
-  }
-
-  private Instant parseAsLocalDateTimeUtc(String raw) {
-    try {
-      return LocalDateTime.parse(raw).toInstant(ZoneOffset.UTC);
-    } catch (DateTimeParseException ignored) {
-      return null;
-    }
   }
 }

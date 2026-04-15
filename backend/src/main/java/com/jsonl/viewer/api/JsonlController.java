@@ -43,6 +43,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api")
 public class JsonlController {
+  private static final String SORT_BY_TIMESTAMP = "timestamp";
+  private static final String SORT_BY_LINE_NO = "lineNo";
+  private static final String SORT_BY_ID = "id";
+  private static final String SORT_DIR_ASC = "asc";
+  private static final String SORT_DIR_DESC = "desc";
+
   private final AppProperties properties;
   private final IngestSourceResolver sourceResolver;
   private final JsonlEntryRepository jsonlEntryRepository;
@@ -84,7 +90,6 @@ public class JsonlController {
     if (sourceId == null) {
       return new StatsResponse(
           null,
-          properties.getJsonlTimestampField(),
           0,
           0,
           0,
@@ -100,7 +105,6 @@ public class JsonlController {
 
     return new StatsResponse(
         sourceId,
-        properties.getJsonlTimestampField(),
         state.getTotalCount(),
         state.getParsedCount(),
         state.getErrorCount(),
@@ -130,6 +134,7 @@ public class JsonlController {
         .orElse(new IngestState(sourceId, 0, 0, null));
     FilterCountRequest safeRequest = request == null ? new FilterCountRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
+    validateSingleTimestampFilter(filters);
     String normalizedFiltersOp = filterService.normalizeFiltersOp(safeRequest.getFiltersOp());
     String requestHash = filterRequestHasher.hash(normalizedFiltersOp, filters);
     long sourceRevision = state.getSourceRevision();
@@ -204,11 +209,18 @@ public class JsonlController {
 
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
+    validateSingleTimestampFilter(filters);
+    String effectiveTimestampFieldPath = resolveEffectiveTimestampFieldPath(filters);
     FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
 
     String sortBy = normalizeSortBy(safeRequest.getSortBy());
     String sortDir = normalizeSortDir(safeRequest.getSortDir());
-    PreviewCursor cursor = decodePreviewCursor(safeRequest.getCursor(), sortBy, sortDir);
+    PreviewCursor cursor = decodePreviewCursor(
+        safeRequest.getCursor(),
+        sortBy,
+        sortDir,
+        effectiveTimestampFieldPath
+    );
     int limit = safeRequest.getLimit() == null ? 10 : Math.min(500, Math.max(1, safeRequest.getLimit()));
 
     List<JsonlEntryRow> rows = jsonlEntryRepository.preview(
@@ -216,6 +228,7 @@ public class JsonlController {
         filterSql,
         sortBy,
         sortDir,
+        effectiveTimestampFieldPath,
         cursor,
         limit,
         toMillis(properties.getPreviewStatementTimeout())
@@ -234,7 +247,9 @@ public class JsonlController {
         .collect(Collectors.toList());
 
     String nextCursor = responseRows.size() == limit
-        ? previewCursorCodec.encode(toPreviewCursor(rows.get(rows.size() - 1), sortBy, sortDir))
+        ? previewCursorCodec.encode(
+            toPreviewCursor(rows.get(rows.size() - 1), sortBy, sortDir, effectiveTimestampFieldPath)
+        )
         : null;
 
     return new PreviewResponse(responseRows, nextCursor);
@@ -297,9 +312,19 @@ public class JsonlController {
     return "ready";
   }
 
-  private PreviewCursor decodePreviewCursor(String rawCursor, String sortBy, String sortDir) {
+  private PreviewCursor decodePreviewCursor(
+      String rawCursor,
+      String sortBy,
+      String sortDir,
+      String effectiveTimestampFieldPath
+  ) {
     try {
-      return previewCursorCodec.decode(rawCursor, sortBy, sortDir);
+      return previewCursorCodec.decode(
+          rawCursor,
+          sortBy,
+          sortDir,
+          SORT_BY_TIMESTAMP.equals(sortBy) ? effectiveTimestampFieldPath : null
+      );
     } catch (IllegalArgumentException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
     }
@@ -307,35 +332,62 @@ public class JsonlController {
 
   private String normalizeSortBy(String rawSortBy) {
     if (rawSortBy == null || rawSortBy.isBlank()) {
-      return "timestamp";
+      return SORT_BY_TIMESTAMP;
     }
-    if ("id".equalsIgnoreCase(rawSortBy)) {
-      return "id";
+    if (SORT_BY_ID.equalsIgnoreCase(rawSortBy)) {
+      return SORT_BY_ID;
     }
     if ("lineno".equalsIgnoreCase(rawSortBy)) {
-      return "lineNo";
+      return SORT_BY_LINE_NO;
     }
-    if ("timestamp".equalsIgnoreCase(rawSortBy)) {
-      return "timestamp";
+    if (SORT_BY_TIMESTAMP.equalsIgnoreCase(rawSortBy)) {
+      return SORT_BY_TIMESTAMP;
     }
     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported sortBy: " + rawSortBy);
   }
 
   private String normalizeSortDir(String rawSortDir) {
     if (rawSortDir == null || rawSortDir.isBlank()) {
-      return "desc";
+      return SORT_DIR_DESC;
     }
-    if ("asc".equalsIgnoreCase(rawSortDir)) {
-      return "asc";
+    if (SORT_DIR_ASC.equalsIgnoreCase(rawSortDir)) {
+      return SORT_DIR_ASC;
     }
-    if ("desc".equalsIgnoreCase(rawSortDir)) {
-      return "desc";
+    if (SORT_DIR_DESC.equalsIgnoreCase(rawSortDir)) {
+      return SORT_DIR_DESC;
     }
     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported sortDir: " + rawSortDir);
   }
 
-  private PreviewCursor toPreviewCursor(JsonlEntryRow row, String sortBy, String sortDir) {
-    return new PreviewCursor(sortBy, sortDir, row.id(), row.lineNo(), row.ts());
+  private PreviewCursor toPreviewCursor(
+      JsonlEntryRow row,
+      String sortBy,
+      String sortDir,
+      String effectiveTimestampFieldPath
+  ) {
+    String tsFieldPath = SORT_BY_TIMESTAMP.equals(sortBy) ? effectiveTimestampFieldPath : null;
+    return new PreviewCursor(sortBy, sortDir, row.id(), row.lineNo(), row.ts(), tsFieldPath);
+  }
+
+  private void validateSingleTimestampFilter(List<FilterCriteria> filters) {
+    int timestampFilterCount = 0;
+    for (FilterCriteria filter : filters) {
+      if (filter.type() != null && SORT_BY_TIMESTAMP.equalsIgnoreCase(filter.type())) {
+        timestampFilterCount++;
+      }
+    }
+    if (timestampFilterCount > 1) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only one timestamp filter is allowed");
+    }
+  }
+
+  private String resolveEffectiveTimestampFieldPath(List<FilterCriteria> filters) {
+    for (FilterCriteria filter : filters) {
+      if (filter.type() != null && SORT_BY_TIMESTAMP.equalsIgnoreCase(filter.type())) {
+        return filterService.normalizeTimestampFieldPath(filter.fieldPath());
+      }
+    }
+    return FilterService.DEFAULT_TIMESTAMP_FIELD_PATH;
   }
 
   private Long toMillis(Duration duration) {

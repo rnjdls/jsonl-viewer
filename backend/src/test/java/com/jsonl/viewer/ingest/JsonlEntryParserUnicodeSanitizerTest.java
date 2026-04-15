@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jsonl.viewer.config.AppProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,9 +13,7 @@ class JsonlEntryParserUnicodeSanitizerTest {
 
   @BeforeEach
   void setUp() {
-    AppProperties properties = new AppProperties();
-    properties.setJsonlTimestampField("timestamp");
-    parser = new JsonlEntryParser(new ObjectMapper(), properties);
+    parser = new JsonlEntryParser(new ObjectMapper());
   }
 
   @Test

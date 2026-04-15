@@ -22,7 +22,8 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "id",
         "asc",
-        new PreviewCursor("id", "asc", 100L, null, null),
+        null,
+        new PreviewCursor("id", "asc", 100L, null, null, null),
         200
     );
 
@@ -37,7 +38,8 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "id",
         "desc",
-        new PreviewCursor("id", "desc", 100L, null, null),
+        null,
+        new PreviewCursor("id", "desc", 100L, null, null, null),
         200
     );
 
@@ -52,7 +54,8 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "lineNo",
         "asc",
-        new PreviewCursor("lineNo", "asc", 11L, 55L, null),
+        null,
+        new PreviewCursor("lineNo", "asc", 11L, 55L, null, null),
         200
     );
 
@@ -67,7 +70,8 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "lineNo",
         "desc",
-        new PreviewCursor("lineNo", "desc", 11L, 55L, null),
+        null,
+        new PreviewCursor("lineNo", "desc", 11L, 55L, null, null),
         200
     );
 
@@ -83,13 +87,15 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "timestamp",
         "asc",
-        new PreviewCursor("timestamp", "asc", 11L, null, ts),
+        "headers.eventTime",
+        new PreviewCursor("timestamp", "asc", 11L, null, ts, "headers.eventTime"),
         200
     );
 
-    assertTrue(query.sql().contains("AND (e.ts > ?2 OR (e.ts = ?3 AND e.id > ?4) OR e.ts IS NULL)"));
-    assertTrue(query.sql().contains("ORDER BY e.ts ASC NULLS LAST, e.id ASC"));
-    assertEquals(List.of(ts, ts, 11L, 200), query.params());
+    assertTrue(query.sql().contains("field_path = ?2"));
+    assertTrue(query.sql().contains("AND (ts_idx.value_ts > ?3 OR (ts_idx.value_ts = ?4 AND e.id > ?5) OR ts_idx.value_ts IS NULL)"));
+    assertTrue(query.sql().contains("ORDER BY ts_idx.value_ts ASC NULLS LAST, e.id ASC"));
+    assertEquals(List.of("headers.eventTime", ts, ts, 11L, 200), query.params());
   }
 
   @Test
@@ -98,13 +104,14 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "timestamp",
         "asc",
-        new PreviewCursor("timestamp", "asc", 11L, null, null),
+        "headers.eventTime",
+        new PreviewCursor("timestamp", "asc", 11L, null, null, "headers.eventTime"),
         200
     );
 
-    assertTrue(query.sql().contains("AND (e.ts IS NULL AND e.id > ?2)"));
-    assertTrue(query.sql().contains("ORDER BY e.ts ASC NULLS LAST, e.id ASC"));
-    assertEquals(List.of(11L, 200), query.params());
+    assertTrue(query.sql().contains("AND (ts_idx.value_ts IS NULL AND e.id > ?3)"));
+    assertTrue(query.sql().contains("ORDER BY ts_idx.value_ts ASC NULLS LAST, e.id ASC"));
+    assertEquals(List.of("headers.eventTime", 11L, 200), query.params());
   }
 
   @Test
@@ -114,13 +121,14 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "timestamp",
         "desc",
-        new PreviewCursor("timestamp", "desc", 11L, null, ts),
+        "headers.eventTime",
+        new PreviewCursor("timestamp", "desc", 11L, null, ts, "headers.eventTime"),
         200
     );
 
-    assertTrue(query.sql().contains("AND (e.ts < ?2 OR (e.ts = ?3 AND e.id < ?4) OR e.ts IS NULL)"));
-    assertTrue(query.sql().contains("ORDER BY e.ts DESC NULLS LAST, e.id DESC"));
-    assertEquals(List.of(ts, ts, 11L, 200), query.params());
+    assertTrue(query.sql().contains("AND (ts_idx.value_ts < ?3 OR (ts_idx.value_ts = ?4 AND e.id < ?5) OR ts_idx.value_ts IS NULL)"));
+    assertTrue(query.sql().contains("ORDER BY ts_idx.value_ts DESC NULLS LAST, e.id DESC"));
+    assertEquals(List.of("headers.eventTime", ts, ts, 11L, 200), query.params());
   }
 
   @Test
@@ -129,12 +137,13 @@ class PreviewQueryBuilderTest {
         BASE_FILTER,
         "timestamp",
         "desc",
-        new PreviewCursor("timestamp", "desc", 11L, null, null),
+        "headers.eventTime",
+        new PreviewCursor("timestamp", "desc", 11L, null, null, "headers.eventTime"),
         200
     );
 
-    assertTrue(query.sql().contains("AND (e.ts IS NULL AND e.id < ?2)"));
-    assertTrue(query.sql().contains("ORDER BY e.ts DESC NULLS LAST, e.id DESC"));
-    assertEquals(List.of(11L, 200), query.params());
+    assertTrue(query.sql().contains("AND (ts_idx.value_ts IS NULL AND e.id < ?3)"));
+    assertTrue(query.sql().contains("ORDER BY ts_idx.value_ts DESC NULLS LAST, e.id DESC"));
+    assertEquals(List.of("headers.eventTime", 11L, 200), query.params());
   }
 }

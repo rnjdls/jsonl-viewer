@@ -148,7 +148,7 @@ export default function App() {
     removeFilter,
     clearAllFilters,
     applyFilters,
-  } = useJsonlSearch([], { timestampField: stats?.timestampField });
+  } = useJsonlSearch([]);
 
   const resetPreviewState = useCallback(() => {
     clearAllCopyResetTimers();
@@ -581,7 +581,6 @@ export default function App() {
         totalCount={stats?.totalCount ?? 0}
         parsedCount={stats?.parsedCount ?? 0}
         errorCount={stats?.errorCount ?? 0}
-        timestampField={stats?.timestampField}
         sourceRevision={stats?.sourceRevision ?? 0}
         searchStatus={stats?.searchStatus || "ready"}
         ingestPaused={Boolean(stats?.ingestPaused)}
@@ -606,7 +605,6 @@ export default function App() {
         filtersOp={filtersOp}
         loading={countsLoading}
         countStatus={counts?.status || "ready"}
-        timestampField={stats?.timestampField}
         onAddFieldFilter={addFieldFilter}
         onAddTextFilter={addTextFilter}
         onAddTimestampFilter={addTimestampFilter}

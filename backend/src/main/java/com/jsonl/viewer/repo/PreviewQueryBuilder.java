@@ -11,20 +11,46 @@ final class PreviewQueryBuilder {
   static final String SORT_BY_ID = "id";
   static final String SORT_DIR_ASC = "asc";
   static final String SORT_DIR_DESC = "desc";
+  private static final String SORT_TS_COLUMN = "ts_idx.value_ts";
 
   private PreviewQueryBuilder() {}
 
-  static PreviewQuery build(FilterSql filterSql, String sortBy, String sortDir, PreviewCursor cursor, int limit) {
+  static PreviewQuery build(
+      FilterSql filterSql,
+      String sortBy,
+      String sortDir,
+      String timestampFieldPath,
+      PreviewCursor cursor,
+      int limit
+  ) {
+    boolean sortByTimestamp = SORT_BY_TIMESTAMP.equals(sortBy);
+    String selectTimestampColumn = sortByTimestamp ? SORT_TS_COLUMN : "e.ts";
+
     StringBuilder sql = new StringBuilder(
-        "SELECT e.id, e.line_no, e.ts, e.parsed->'key', e.parsed->'headers', e.parse_error, " +
+        "SELECT e.id, e.line_no, " + selectTimestampColumn + ", e.parsed->'key', e.parsed->'headers', e.parse_error, " +
             "CASE WHEN e.parse_error IS NOT NULL THEN LEFT(e.raw_line, 500) ELSE NULL END AS raw_snippet, " +
             "CASE WHEN e.parse_error IS NOT NULL THEN LENGTH(e.raw_line) > 500 ELSE NULL END AS raw_truncated " +
             "FROM jsonl_entry e " +
-            "JOIN (" + filterSql.candidateIdsSql() + ") candidate_ids ON candidate_ids.id = e.id " +
-            "WHERE e.file_path = ?1 "
+            "JOIN (" + filterSql.candidateIdsSql() + ") candidate_ids ON candidate_ids.id = e.id "
     );
     List<Object> queryParams = new ArrayList<>();
     int nextParamIndex = filterSql.params().size() + 2;
+
+    if (sortByTimestamp) {
+      if (timestampFieldPath == null || timestampFieldPath.isBlank()) {
+        throw new IllegalArgumentException("timestampFieldPath is required for timestamp sorting");
+      }
+      sql.append("LEFT JOIN (" +
+          "SELECT entry_id, MAX(value_ts) AS value_ts " +
+          "FROM jsonl_entry_field_index " +
+          "WHERE file_path = ?1 AND field_path = ?").append(nextParamIndex)
+          .append(" GROUP BY entry_id" +
+              ") ts_idx ON ts_idx.entry_id = e.id ");
+      queryParams.add(timestampFieldPath);
+      nextParamIndex++;
+    }
+
+    sql.append("WHERE e.file_path = ?1 ");
 
     if (cursor != null) {
       nextParamIndex = appendCursorPredicate(sql, queryParams, nextParamIndex, sortBy, sortDir, cursor);
@@ -86,17 +112,17 @@ final class PreviewQueryBuilder {
     boolean asc = isAsc(sortDir);
     if (cursor.ts() != null) {
       String op = asc ? ">" : "<";
-      sql.append("AND (e.ts ").append(op).append(" ?").append(nextParamIndex)
-          .append(" OR (e.ts = ?").append(nextParamIndex + 1)
+      sql.append("AND (").append(SORT_TS_COLUMN).append(" ").append(op).append(" ?").append(nextParamIndex)
+          .append(" OR (").append(SORT_TS_COLUMN).append(" = ?").append(nextParamIndex + 1)
           .append(" AND e.id ").append(op).append(" ?").append(nextParamIndex + 2)
-          .append(") OR e.ts IS NULL) ");
+          .append(") OR ").append(SORT_TS_COLUMN).append(" IS NULL) ");
       queryParams.add(cursor.ts());
       queryParams.add(cursor.ts());
       queryParams.add(cursor.id());
       return nextParamIndex + 3;
     }
 
-    sql.append("AND (e.ts IS NULL AND e.id ").append(asc ? ">" : "<")
+    sql.append("AND (").append(SORT_TS_COLUMN).append(" IS NULL AND e.id ").append(asc ? ">" : "<")
         .append(" ?").append(nextParamIndex).append(") ");
     queryParams.add(cursor.id());
     return nextParamIndex + 1;
@@ -107,7 +133,7 @@ final class PreviewQueryBuilder {
     return switch (sortBy) {
       case SORT_BY_ID -> "e.id " + direction;
       case SORT_BY_LINE_NO -> "e.line_no " + direction + ", e.id " + direction;
-      case SORT_BY_TIMESTAMP -> "e.ts " + direction + " NULLS LAST, e.id " + direction;
+      case SORT_BY_TIMESTAMP -> SORT_TS_COLUMN + " " + direction + " NULLS LAST, e.id " + direction;
       default -> throw new IllegalArgumentException("Unsupported sortBy: " + sortBy);
     };
   }

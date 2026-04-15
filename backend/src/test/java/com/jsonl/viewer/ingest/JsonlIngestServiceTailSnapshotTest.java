@@ -79,7 +79,7 @@ class JsonlIngestServiceTailSnapshotTest {
           jsonlEntryRepository,
           ingestStateRepository,
           new IngestPauseState(),
-          new JsonlEntryParser(new ObjectMapper(), properties),
+          new JsonlEntryParser(new ObjectMapper()),
           fieldIndexExtractor,
           entityManager
       );

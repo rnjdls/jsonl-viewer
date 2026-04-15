@@ -43,12 +43,20 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
       FilterSql filterSql,
       String sortBy,
       String sortDir,
+      String timestampFieldPath,
       PreviewCursor cursor,
       int limit,
       Long statementTimeoutMs
   ) {
     applyStatementTimeout(statementTimeoutMs);
-    PreviewQuery previewQuery = PreviewQueryBuilder.build(filterSql, sortBy, sortDir, cursor, limit);
+    PreviewQuery previewQuery = PreviewQueryBuilder.build(
+        filterSql,
+        sortBy,
+        sortDir,
+        timestampFieldPath,
+        cursor,
+        limit
+    );
     Query query = entityManager.createNativeQuery(previewQuery.sql());
     bindFilterQueryParameters(query, filePath, filterSql.params());
     bindAdditionalQueryParameters(query, filterSql.params().size() + 2, previewQuery.params());

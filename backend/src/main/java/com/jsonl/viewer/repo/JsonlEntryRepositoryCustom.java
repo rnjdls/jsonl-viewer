@@ -12,6 +12,7 @@ public interface JsonlEntryRepositoryCustom {
       FilterSql filterSql,
       String sortBy,
       String sortDir,
+      String timestampFieldPath,
       PreviewCursor cursor,
       int limit,
       Long statementTimeoutMs
@@ -23,5 +24,5 @@ public interface JsonlEntryRepositoryCustom {
 
   record FilterSql(String candidateIdsSql, List<Object> params) {}
 
-  record PreviewCursor(String sortBy, String sortDir, long id, Long lineNo, Instant ts) {}
+  record PreviewCursor(String sortBy, String sortDir, long id, Long lineNo, Instant ts, String tsFieldPath) {}
 }

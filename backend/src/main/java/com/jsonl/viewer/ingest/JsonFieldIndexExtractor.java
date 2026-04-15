@@ -2,6 +2,8 @@ package com.jsonl.viewer.ingest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
+import com.jsonl.viewer.service.TimestampParser;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -16,11 +18,17 @@ public class JsonFieldIndexExtractor {
     }
 
     List<JsonlEntryFieldIndex> rows = new ArrayList<>();
-    walk(parsed, filePath, entryId, rows);
+    walk(parsed, filePath, entryId, "", rows);
     return rows;
   }
 
-  private void walk(JsonNode node, String filePath, long entryId, List<JsonlEntryFieldIndex> rows) {
+  private void walk(
+      JsonNode node,
+      String filePath,
+      long entryId,
+      String parentPath,
+      List<JsonlEntryFieldIndex> rows
+  ) {
     if (node == null || node.isNull()) {
       return;
     }
@@ -30,25 +38,28 @@ public class JsonFieldIndexExtractor {
       while (fields.hasNext()) {
         Map.Entry<String, JsonNode> field = fields.next();
         JsonNode value = field.getValue();
+        String fieldPath = parentPath.isEmpty() ? field.getKey() : parentPath + "." + field.getKey();
 
         rows.add(new JsonlEntryFieldIndex(
             entryId,
             filePath,
             field.getKey(),
+            fieldPath,
             toValueText(value),
+            toValueTs(value),
             valueType(value),
             value != null && value.isNull(),
             isEmptyValue(value)
         ));
 
-        walk(value, filePath, entryId, rows);
+        walk(value, filePath, entryId, fieldPath, rows);
       }
       return;
     }
 
     if (node.isArray()) {
       for (JsonNode child : node) {
-        walk(child, filePath, entryId, rows);
+        walk(child, filePath, entryId, parentPath, rows);
       }
     }
   }
@@ -102,5 +113,9 @@ public class JsonFieldIndexExtractor {
       return value.isEmpty();
     }
     return false;
+  }
+
+  private Instant toValueTs(JsonNode value) {
+    return TimestampParser.parseJsonScalar(value);
   }
 }
