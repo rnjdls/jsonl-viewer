@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./JsonValue.css";
 
 /**
@@ -8,10 +8,16 @@ import "./JsonValue.css";
  * (objects with `__original` / `__decoded` keys) and renders them with a
  * colour-coded badge and the decoded text inline.
  *
- * @param {{ val: *, depth?: number }} props
+ * @param {{ val: *, depth?: number, expandAllToken?: number }} props
  */
-export function JsonValue({ val, depth = 0 }) {
-  const [collapsed, setCollapsed] = useState(depth > 3);
+export function JsonValue({ val, depth = 0, expandAllToken = 0 }) {
+  const [collapsed, setCollapsed] = useState(expandAllToken > 0 ? false : depth > 3);
+
+  useEffect(() => {
+    if (expandAllToken > 0) {
+      setCollapsed(false);
+    }
+  }, [expandAllToken]);
 
   /* ── Primitives ──────────────────────────────────────── */
   if (val === null)             return <span className="jv-null">null</span>;
@@ -47,7 +53,7 @@ export function JsonValue({ val, depth = 0 }) {
           <div className="jv-indent">
             {val.map((item, i) => (
               <div key={i} className="jv-row">
-                <JsonValue val={item} depth={depth + 1} />
+                <JsonValue val={item} depth={depth + 1} expandAllToken={expandAllToken} />
                 {i < val.length - 1 && <span className="jv-comma">,</span>}
               </div>
             ))}
@@ -78,7 +84,7 @@ export function JsonValue({ val, depth = 0 }) {
             <div key={k} className="jv-row">
               <span className="jv-key">"{k}"</span>
               <span className="jv-colon">: </span>
-              <JsonValue val={v} depth={depth + 1} />
+              <JsonValue val={v} depth={depth + 1} expandAllToken={expandAllToken} />
               {i < entries.length - 1 && <span className="jv-comma">,</span>}
             </div>
           ))}

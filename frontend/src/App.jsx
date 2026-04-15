@@ -90,6 +90,7 @@ export default function App() {
   const [entryRawLoadingById, setEntryRawLoadingById] = useState({});
   const [entryCopyStatusById, setEntryCopyStatusById] = useState({});
   const [expandedById, setExpandedById] = useState({});
+  const [jsonTreeExpandTokenById, setJsonTreeExpandTokenById] = useState({});
   const [error, setError] = useState("");
   const [actionState, setActionState] = useState({ reset: false, reload: false });
   const copyResetTimersRef = useRef({});
@@ -141,6 +142,7 @@ export default function App() {
     setEntryRawLoadingById({});
     setEntryCopyStatusById({});
     setExpandedById({});
+    setJsonTreeExpandTokenById({});
     copyInFlightByIdRef.current = {};
   }, [clearAllCopyResetTimers]);
 
@@ -405,6 +407,19 @@ export default function App() {
 
   const handleCollapseBody = useCallback((id) => {
     setExpandedById((prev) => ({ ...prev, [id]: false }));
+    setJsonTreeExpandTokenById((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
+  const handleExpandAllJsonTree = useCallback((id) => {
+    setJsonTreeExpandTokenById((prev) => ({
+      ...prev,
+      [id]: (prev[id] ?? 0) + 1,
+    }));
   }, []);
 
   const handleLoadFullRaw = useCallback(
@@ -687,9 +702,11 @@ export default function App() {
                   onLoadBody={() => handleLoadBody(row.id)}
                   onLoadRaw={() => handleLoadFullRaw(row.id)}
                   onCollapse={() => handleCollapseBody(row.id)}
+                  onExpandAll={() => handleExpandAllJsonTree(row.id)}
                   onCopy={() => handleCopyRawLine(row.id)}
                   copyLabel={getCopyLabel(copyStatus)}
                   copyDisabled={copyStatus === "copying"}
+                  expandAllToken={jsonTreeExpandTokenById[row.id] ?? 0}
                 />
               );
             })}
