@@ -14,10 +14,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,9 +52,8 @@ class MockJsonlGeneratorServiceTest {
 
     JsonNode generated = mapper.readTree(lines.get(0));
     assertTrue(generated.isObject());
-
-    JsonNode template = mapper.readTree(Files.readAllLines(samplePath, StandardCharsets.UTF_8).get(0));
-    assertEquals(fieldNames(template), fieldNames(generated));
+    assertTrue(generated.size() >= 50);
+    assertEquals(20, maxDepth(generated));
 
     assertEquals(1L, generated.path("id").asLong());
 
@@ -71,14 +67,18 @@ class MockJsonlGeneratorServiceTest {
     assertEquals(expectedCorrelationId, generated.path("headers").path("correlationId").asText());
 
     assertFalse(generated.path("headers").path("eventTime").asText().isBlank());
+    assertEquals(1, generated.path("deepPayload").path("depth").asInt());
   }
 
-  private Set<String> fieldNames(JsonNode node) {
-    Set<String> names = new HashSet<>();
-    Iterator<String> it = node.fieldNames();
-    while (it.hasNext()) {
-      names.add(it.next());
+  private int maxDepth(JsonNode node) {
+    if (node == null || node.isNull() || node.isValueNode()) {
+      return 0;
     }
-    return names;
+
+    int childDepth = 0;
+    for (JsonNode child : node) {
+      childDepth = Math.max(childDepth, maxDepth(child));
+    }
+    return 1 + childDepth;
   }
 }
