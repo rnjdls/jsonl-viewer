@@ -4,14 +4,22 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
 import com.jsonl.viewer.service.TimestampParser;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
 public class JsonFieldIndexExtractor {
+  private static final Instant POSTGRES_TIMESTAMPTZ_MIN =
+      LocalDateTime.of(-4712, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC);
+  private static final Instant POSTGRES_TIMESTAMPTZ_MAX =
+      LocalDateTime.of(294276, 12, 31, 23, 59, 59, 999_999_000).toInstant(ZoneOffset.UTC);
+
   public List<JsonlEntryFieldIndex> extract(String filePath, long entryId, JsonNode parsed) {
     if (parsed == null || parsed.isNull()) {
       return List.of();
@@ -46,7 +54,7 @@ public class JsonFieldIndexExtractor {
             field.getKey(),
             fieldPath,
             toValueText(value),
-            toValueTs(value),
+            toValueTs(field.getKey(), value),
             valueType(value),
             value != null && value.isNull(),
             isEmptyValue(value)
@@ -74,7 +82,7 @@ public class JsonFieldIndexExtractor {
     if (value.isNumber() || value.isBoolean()) {
       return value.asText();
     }
-    return value.toString();
+    return null;
   }
 
   private String valueType(JsonNode value) {
@@ -115,7 +123,39 @@ public class JsonFieldIndexExtractor {
     return false;
   }
 
-  private Instant toValueTs(JsonNode value) {
-    return TimestampParser.parseJsonScalar(value);
+  private Instant toValueTs(String fieldKey, JsonNode value) {
+    if (!isTimestampLikeField(fieldKey)) {
+      return null;
+    }
+    Instant parsed;
+    try {
+      parsed = TimestampParser.parseJsonScalar(value);
+    } catch (RuntimeException ignored) {
+      return null;
+    }
+    if (parsed == null) {
+      return null;
+    }
+    if (parsed.isBefore(POSTGRES_TIMESTAMPTZ_MIN) || parsed.isAfter(POSTGRES_TIMESTAMPTZ_MAX)) {
+      return null;
+    }
+    return parsed;
+  }
+
+  private boolean isTimestampLikeField(String fieldKey) {
+    if (fieldKey == null || fieldKey.isBlank()) {
+      return false;
+    }
+    String normalized = fieldKey.trim().toLowerCase(Locale.ROOT);
+    if (normalized.equals("timestamp")
+        || normalized.equals("time")
+        || normalized.equals("ts")
+        || normalized.equals("date")) {
+      return true;
+    }
+    if (normalized.endsWith("time")) {
+      return true;
+    }
+    return fieldKey.trim().endsWith("At") || normalized.endsWith("_at");
   }
 }

@@ -10,6 +10,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Count-first UI: returns immediate totals and deferred exact match counts for heavy filters.
 - Lazy preview with keyset pagination ("Load Preview" with Next/Prev paging).
 - Field contains filter (JSON key searched anywhere in the JSON tree), full-text search over parsed JSON, and timestamp range filter.
+- Field index stores one row per object-field occurrence, keeps metadata (`field_key`, `field_path`, null/empty/type) for the full tree, and stores `value_text` only for scalar values.
 - Admin actions: reload file from start, delete all ingested rows.
 - Resumes ingestion after restart using persisted byte offsets.
 
@@ -55,6 +56,8 @@ Steps
 ```bash
 docker compose up --build
 ```
+
+Postgres in `docker-compose.yml` is started with `max_wal_size=1GB` to reduce checkpoint pressure during large ingests.
 
 4. Or run viewer + mock generator (backend reads `/data/generated.jsonl`):
 
@@ -235,6 +238,9 @@ Ingest behavior note:
 - `jsonl_entry_field_index`
   - one row per JSON key occurrence
   - `entry_id`, `file_path`, `field_key`, `field_path`, `value_text`, `value_ts`, `value_type`, `is_null`, `is_empty`
+  - `value_text` is populated for scalar values only (string, number, boolean, null)
+  - object/array container rows keep metadata but set `value_text` to `null`
+  - `value_ts` is populated only for timestamp-like scalar field names (`timestamp`, `time`, `ts`, `date`, `*Time`, `*At`)
 
 - `filter_count_cache`
   - keyed by `(file_path, request_hash)`
