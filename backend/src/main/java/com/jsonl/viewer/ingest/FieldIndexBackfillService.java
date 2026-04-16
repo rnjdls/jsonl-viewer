@@ -66,7 +66,7 @@ public class FieldIndexBackfillService {
     workerExecutor.shutdownNow();
   }
 
-  private boolean backfillOneSource() {
+  boolean backfillOneSource() {
     List<IngestState> pendingSources = ingestStateRepository.findPendingFieldIndexBuilds();
     if (pendingSources.isEmpty()) {
       return false;

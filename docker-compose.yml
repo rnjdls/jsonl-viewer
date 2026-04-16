@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: jsonl-viewer-db
+    command: ["postgres", "-c", "max_wal_size=1GB"]
     environment:
       POSTGRES_DB: jsonl
       POSTGRES_USER: jsonl
