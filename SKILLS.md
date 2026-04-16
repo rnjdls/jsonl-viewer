@@ -1,6 +1,16 @@
 # Skills
 
-This repo includes a small set of reusable “skills” (agent workflows) as folders under `docs/skills/`.
+This repo includes a small set of reusable agent workflows as folders under `docs/skills/`.
+
+## `implement-plan-workflow`
+
+- **When to use**: You are implementing an approved plan, feature, fix, chore, or docs task and need the repo's required branching, validation, smoke-test, and plan archival workflow.
+- **Skill file**: `docs/skills/implement-plan-workflow/SKILL.md`
+
+## `change-filters-safely`
+
+- **When to use**: You are adding or changing filter/search behavior and need to keep backend filter logic, frontend payload mapping, and the filter UI in sync.
+- **Skill file**: `docs/skills/change-filters-safely/SKILL.md`
 
 ## `publish-squash-merge-main`
 
