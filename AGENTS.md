@@ -16,10 +16,6 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 - `docs/`: Plans/notes (implemented plans live in `docs/plans/zz-implemented/` and always skip browsing the implemented folder)
 - `mock-generator/`: Optional Spring Boot service that appends to `data/generated.jsonl`
 
-## Plans workflow
-- Before implementing a plan (i.e., before any code changes), create a fresh category branch for the work (e.g., `feature/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`).
-- Plan markdown files live under `docs/plans/`; once a plan is implemented and verified (tests/smoke check pass), move the plan file into `docs/plans/zz-implemented/`.
-
 ## Architecture rules
 - UI never loads full files; it requests counts + preview pages from `/api/*`.
 - Preview pagination stays keyset-based using an opaque cursor (`sortBy/sortDir` + stable `id` tie-breaker).
@@ -31,11 +27,11 @@ Local-first JSONL viewer optimized for huge files: backend ingests + filters in 
 - Backend: controllers thin; logic in services/repos; constructor injection; SLF4J logging.
 - Frontend: functional components + hooks; keep API payload shape centralized.
 
-## Testing (≥ 80% coverage)
-- For every implemented feature/plan: run a quick boot smoke test (bring the stack up and confirm backend + UI start). If boot fails, immediately investigate logs, find the root cause, and implement a fix before moving on.
-- Target: **≥ 80% line coverage** for backend + mock-generator core logic; add regression tests with bug fixes.
-- Run: `cd backend && mvn test` / `cd mock-generator && mvn test`
-- Frontend: no runner configured yet; if adding non-trivial logic, add tests + coverage (recommended: Vitest + React Testing Library).
+## Workflow reminders
+- Use `docs/skills/implement-plan-workflow/SKILL.md` when implementing any approved plan, feature, fix, chore, or docs task in this repo.
+- Use `docs/skills/change-filters-safely/SKILL.md` whenever you add or change filter/search behavior.
+- Coverage target: **≥ 80%** line coverage for backend + mock-generator core logic; add regression tests with bug fixes.
+- Frontend has no runner configured yet; if adding non-trivial logic, add tests + coverage (recommended: Vitest + React Testing Library).
 
 ## Common commands
 - Full stack: `docker compose up --build`

@@ -1,10 +1,14 @@
+---
+name: package-dist-zip
+description: Create a distribution zip of this repo while excluding docs, build artifacts, git metadata, and other non-distribution files.
+---
+
 # `package-dist-zip`
 
 Create a distribution zip of this repo **without**:
 
 - `mock-generator/`
 - `docs/`
-- `skills/`
 - `docker-compose.generated.yml`
 - `backend/target/`
 - `frontend/coverage/`
