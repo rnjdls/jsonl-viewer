@@ -1,0 +1,25 @@
+package com.jsonl.viewer.ingest;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
+import org.junit.jupiter.api.Test;
+
+class FieldIndexBackfillMigrationTest {
+
+  @Test
+  void migrationMarksExistingSourcesForFieldIndexRebuild() throws Exception {
+    InputStream stream = Objects.requireNonNull(
+        getClass().getResourceAsStream("/db/migration/V3__field_index_scalar_text_backfill.sql")
+    );
+
+    String sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+
+    assertTrue(sql.contains("UPDATE ingest_state"));
+    assertTrue(sql.contains("indexed_revision = 0"));
+    assertTrue(sql.contains("ingest_status = 'building'"));
+    assertTrue(sql.contains("WHERE source_revision > 0"));
+  }
+}

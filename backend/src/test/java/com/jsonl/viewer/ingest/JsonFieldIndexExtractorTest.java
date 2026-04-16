@@ -51,13 +51,29 @@ class JsonFieldIndexExtractorTest {
     assertEquals("200", numberStatus.getValueText());
     assertTrue(!numberStatus.isNull());
     assertTrue(!numberStatus.isEmpty());
-    assertEquals(Instant.ofEpochSecond(200L), numberStatus.getValueTs());
+    assertNull(numberStatus.getValueTs());
 
     JsonlEntryFieldIndex nullStatus = rows.stream()
         .filter(row -> "headers.status".equals(row.getFieldPath()) && row.isNull())
         .findFirst()
         .orElseThrow();
     assertEquals("null", nullStatus.getValueType());
+
+    JsonlEntryFieldIndex objectContainer = rows.stream()
+        .filter(row -> "headers.obj".equals(row.getFieldPath()))
+        .findFirst()
+        .orElseThrow();
+    assertEquals("object", objectContainer.getValueType());
+    assertNull(objectContainer.getValueText());
+    assertTrue(objectContainer.isEmpty());
+
+    JsonlEntryFieldIndex arrayContainer = rows.stream()
+        .filter(row -> "array".equals(row.getFieldPath()))
+        .findFirst()
+        .orElseThrow();
+    assertEquals("array", arrayContainer.getValueType());
+    assertNull(arrayContainer.getValueText());
+    assertTrue(!arrayContainer.isEmpty());
 
     JsonlEntryFieldIndex emptyString = rows.stream()
         .filter(row -> "emptyString".equals(row.getFieldPath()))
@@ -98,5 +114,38 @@ class JsonFieldIndexExtractorTest {
         .findFirst()
         .orElseThrow();
     assertEquals(Instant.ofEpochSecond(1712560000L), epochTimestamp.getValueTs());
+  }
+
+  @Test
+  void ignoresOutOfRangeTimestampCandidates() throws Exception {
+    JsonNode parsed = objectMapper.readTree("""
+        {
+          "timestamp": "+500000-01-01T00:00:00Z",
+          "ts": 9223372036854775807,
+          "createdAt": "-500000-01-01T00:00:00Z",
+          "eventTime": "2026-04-06T13:23:58Z"
+        }
+        """);
+
+    List<JsonlEntryFieldIndex> rows = extractor.extract("source-a", 100L, parsed);
+
+    JsonlEntryFieldIndex rootTimestamp = findByPath(rows, "timestamp");
+    assertNull(rootTimestamp.getValueTs());
+
+    JsonlEntryFieldIndex ts = findByPath(rows, "ts");
+    assertNull(ts.getValueTs());
+
+    JsonlEntryFieldIndex createdAt = findByPath(rows, "createdAt");
+    assertNull(createdAt.getValueTs());
+
+    JsonlEntryFieldIndex eventTime = findByPath(rows, "eventTime");
+    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), eventTime.getValueTs());
+  }
+
+  private JsonlEntryFieldIndex findByPath(List<JsonlEntryFieldIndex> rows, String fieldPath) {
+    return rows.stream()
+        .filter(row -> fieldPath.equals(row.getFieldPath()))
+        .findFirst()
+        .orElseThrow();
   }
 }
