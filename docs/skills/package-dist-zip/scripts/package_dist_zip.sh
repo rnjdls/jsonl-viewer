@@ -31,7 +31,6 @@ rsync -a \
   --exclude ".gitmodules" \
   --exclude "mock-generator/" \
   --exclude "docs/" \
-  --exclude "skills/" \
   --exclude "docker-compose.generated.yml" \
   --exclude "backend/target/" \
   --exclude "frontend/coverage/" \

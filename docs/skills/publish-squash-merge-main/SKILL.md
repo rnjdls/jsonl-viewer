@@ -42,5 +42,4 @@ If the repo has tests/builds configured, run them before merging:
 
 If you want a deterministic one-shot command, use:
 
-- `bash skills/publish-squash-merge-main/scripts/publish_squash_merge.sh --branch-message "..." --main-message "..."`
-
+- `bash docs/skills/publish-squash-merge-main/scripts/publish_squash_merge.sh --branch-message "..." --main-message "..."`
