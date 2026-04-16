@@ -33,6 +33,12 @@ public class MockJsonlGeneratorService {
   private static final int MIN_TOP_LEVEL_FIELDS = 50;
   private static final int MIN_OBJECT_DEPTH = 20;
   private static final String DEEP_PAYLOAD_FIELD = "deepPayload";
+  private static final List<String> EXTRA_DEEP_PAYLOAD_FIELDS = List.of(
+      "deepPayloadDepth50A",
+      "deepPayloadDepth50B",
+      "deepPayloadDepth50C"
+  );
+  private static final int EXTRA_DEEP_PAYLOAD_DEPTH = 50;
   private static final String SYNTHETIC_FIELD_PREFIX = "extraField";
   private static final List<String> FALLBACK_USERS = buildFallbackUsers();
   private static final List<String> FALLBACK_ACTIONS = List.of("access", "create", "update", "delete");
@@ -269,13 +275,20 @@ public class MockJsonlGeneratorService {
   }
 
   private void ensureDepth(ObjectNode entry, long id, String timestamp) {
-    int chainDepth = Math.max(1, MIN_OBJECT_DEPTH - 1);
+    entry.set(DEEP_PAYLOAD_FIELD, createDeepChain(id, timestamp, MIN_OBJECT_DEPTH, "node"));
+    for (String fieldName : EXTRA_DEEP_PAYLOAD_FIELDS) {
+      entry.set(fieldName, createDeepChain(id, timestamp, EXTRA_DEEP_PAYLOAD_DEPTH, fieldName));
+    }
+  }
+
+  private ObjectNode createDeepChain(long id, String timestamp, int depth, String nodePrefix) {
+    int chainDepth = Math.max(1, depth);
     ObjectNode chainRoot = objectMapper.createObjectNode();
     ObjectNode cursor = chainRoot;
 
     for (int level = 1; level <= chainDepth; level++) {
       cursor.put("depth", level);
-      cursor.put("nodeId", "node-" + id + "-" + level);
+      cursor.put("nodeId", nodePrefix + "-" + id + "-" + level);
 
       if (level == chainDepth) {
         cursor.put("leafTimestamp", timestamp);
@@ -288,7 +301,7 @@ public class MockJsonlGeneratorService {
       cursor = child;
     }
 
-    entry.set(DEEP_PAYLOAD_FIELD, chainRoot);
+    return chainRoot;
   }
 
   private void ensureMinimumTopLevelFields(ObjectNode entry, long id) {

@@ -23,6 +23,10 @@ public class IngestConfigurationValidator {
 
   @PostConstruct
   void validate() {
+    if (properties.getIngestMaxBytesPerPass() <= 0) {
+      throw new IllegalStateException("app.ingest-max-bytes-per-pass must be positive");
+    }
+
     if (!sourceResolver.isKafkaMode()) {
       return;
     }

@@ -51,8 +51,9 @@ app:
   ingest-mode: ${INGEST_MODE:file}
   source-id: ${INGEST_SOURCE_ID:}
   jsonl-file-path: ${JSONL_FILE_PATH:}
-  ingest-poll-interval-ms: ${INGEST_POLL_INTERVAL_MS:1000}
+  ingest-poll-interval-ms: ${INGEST_POLL_INTERVAL_MS:500}
   ingest-batch-size: ${INGEST_BATCH_SIZE:500}
+  ingest-max-bytes-per-pass: ${INGEST_MAX_BYTES_PER_PASS:3145728}
   preview-statement-timeout: ${APP_PREVIEW_STATEMENT_TIMEOUT:20s}
   count-job-statement-timeout: ${APP_COUNT_JOB_STATEMENT_TIMEOUT:10m}
   kafka:

@@ -8,8 +8,9 @@ public class AppProperties {
   private String ingestMode = "file";
   private String sourceId;
   private String jsonlFilePath;
-  private long ingestPollIntervalMs = 1000;
+  private long ingestPollIntervalMs = 500;
   private int ingestBatchSize = 500;
+  private long ingestMaxBytesPerPass = 3L * 1024 * 1024;
   private Duration previewStatementTimeout = Duration.ofSeconds(20);
   private Duration countJobStatementTimeout = Duration.ofMinutes(10);
   private Kafka kafka = new Kafka();
@@ -52,6 +53,14 @@ public class AppProperties {
 
   public void setIngestBatchSize(int ingestBatchSize) {
     this.ingestBatchSize = ingestBatchSize;
+  }
+
+  public long getIngestMaxBytesPerPass() {
+    return ingestMaxBytesPerPass;
+  }
+
+  public void setIngestMaxBytesPerPass(long ingestMaxBytesPerPass) {
+    this.ingestMaxBytesPerPass = ingestMaxBytesPerPass;
   }
 
   public Duration getPreviewStatementTimeout() {

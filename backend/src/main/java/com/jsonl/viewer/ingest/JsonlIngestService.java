@@ -29,6 +29,11 @@ public class JsonlIngestService {
   private static final Logger log = LoggerFactory.getLogger(JsonlIngestService.class);
   private static final int INGEST_READ_BUFFER_SIZE = 16 * 1024;
 
+  private enum PassStopReason {
+    SNAPSHOT_EXHAUSTED,
+    BYTE_CAP
+  }
+
   private final AppProperties properties;
   private final IngestSourceResolver sourceResolver;
   private final JsonlEntryRepository jsonlEntryRepository;
@@ -60,7 +65,7 @@ public class JsonlIngestService {
   }
 
   @Transactional
-  @Scheduled(fixedDelayString = "${app.ingest-poll-interval-ms:1000}")
+  @Scheduled(fixedDelayString = "${app.ingest-poll-interval-ms:500}")
   public void pollFile() {
     if (!sourceResolver.isFileMode()) {
       return;
@@ -176,14 +181,19 @@ public class JsonlIngestService {
       long ingestStartNanos = System.nanoTime();
       List<JsonlEntry> batch = new ArrayList<>();
       ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+      long maxBytesPerPass = properties.getIngestMaxBytesPerPass();
       long cursor = offset;
       long newOffset = offset;
       long remaining = Math.max(0, targetSize - offset);
+      long completedLinesThisPass = 0;
+      long bytesConsumedThisPass = 0;
+      boolean stopRequested = false;
+      PassStopReason stopReason = PassStopReason.SNAPSHOT_EXHAUSTED;
       byte[] readBuffer = new byte[INGEST_READ_BUFFER_SIZE];
 
       try (InputStream in = new BufferedInputStream(Files.newInputStream(path), INGEST_READ_BUFFER_SIZE)) {
         skipFully(in, offset);
-        while (remaining > 0) {
+        while (remaining > 0 && !stopRequested) {
           int bytesToRead = (int) Math.min(readBuffer.length, remaining);
           int bytesRead = in.read(readBuffer, 0, bytesToRead);
           if (bytesRead == -1) break;
@@ -196,6 +206,12 @@ public class JsonlIngestService {
           int segmentStart = 0;
           for (int i = 0; i < bytesRead; i++) {
             if (readBuffer[i] != '\n') continue;
+
+            if (bytesConsumedThisPass >= maxBytesPerPass && completedLinesThisPass > 0) {
+              stopReason = PassStopReason.BYTE_CAP;
+              stopRequested = true;
+              break;
+            }
 
             int segmentLength = i - segmentStart;
             if (segmentLength > 0) {
@@ -228,11 +244,14 @@ public class JsonlIngestService {
                 batch.clear();
               }
             }
-            newOffset = chunkStartCursor + i + 1;
+            long lineEndOffset = chunkStartCursor + i + 1;
+            newOffset = lineEndOffset;
+            bytesConsumedThisPass = lineEndOffset - offset;
+            completedLinesThisPass++;
             segmentStart = i + 1;
           }
 
-          if (segmentStart < bytesRead) {
+          if (!stopRequested && segmentStart < bytesRead) {
             buffer.write(readBuffer, segmentStart, bytesRead - segmentStart);
           }
         }
@@ -243,11 +262,13 @@ public class JsonlIngestService {
         batch.clear();
       }
 
-      if (buffer.size() > 0) {
-        // Partial line: roll back to the start of the incomplete line.
-        newOffset = cursor - buffer.size();
-      } else {
-        newOffset = cursor;
+      if (!stopRequested) {
+        if (buffer.size() > 0) {
+          // Partial line: roll back to the start of the incomplete line.
+          newOffset = cursor - buffer.size();
+        } else {
+          newOffset = cursor;
+        }
       }
 
       if (newOffset != offset || sourceMutated) {
@@ -270,13 +291,14 @@ public class JsonlIngestService {
           long bytesIngested = newOffset - offset;
           long linesIngested = lineNo - startLineNo;
           log.debug(
-              "Ingest pass advanced state for {}: +{} bytes, +{} lines in {} ms ({} -> {})",
+              "Ingest pass advanced state for {}: +{} bytes, +{} lines in {} ms ({} -> {}, stop={})",
               sourceId,
               bytesIngested,
               linesIngested,
               elapsedMs,
               offset,
-              newOffset
+              newOffset,
+              stopReason.name().toLowerCase(java.util.Locale.ROOT)
           );
         }
       }
