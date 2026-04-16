@@ -67,7 +67,7 @@ class FieldIndexBackfillServiceTest {
 
     PGobject pgObject = new PGobject();
     pgObject.setType("jsonb");
-    pgObject.setValue("{\"timestamp\":\"2026-04-06T13:23:58Z\"}");
+    pgObject.setValue("{\"headers\":{\"status\":\"ok\"}}");
     when(selectQuery.getResultList()).thenReturn(
         List.<Object[]>of(new Object[] {11L, pgObject}),
         List.of()
@@ -76,10 +76,9 @@ class FieldIndexBackfillServiceTest {
     JsonlEntryFieldIndex indexRow = new JsonlEntryFieldIndex(
         11L,
         "source-a",
-        "timestamp",
-        "timestamp",
-        "2026-04-06T13:23:58Z",
-        Instant.parse("2026-04-06T13:23:58Z"),
+        "status",
+        "headers.status",
+        "ok",
         "string",
         false,
         false

@@ -280,6 +280,43 @@ describe("App admin confirmations and lock", () => {
     );
   });
 
+  it("hides timestamp controls and sends only field/text filters", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.queryByRole("button", { name: "+ Timestamp Range" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "eventTime");
+    await user.type(screen.getByLabelText("Match value"), "2026");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByLabelText("Full text query"), "worker");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+
+    const searchPayload = api.getPreview.mock.calls[1][0];
+    expect(searchPayload.filters).toEqual([
+      expect.objectContaining({
+        type: "field",
+        fieldPath: "eventTime",
+        op: "contains",
+        valueContains: "2026",
+      }),
+      expect.objectContaining({
+        type: "text",
+        query: "worker",
+      }),
+    ]);
+    expect(searchPayload.filters.every((filter) => !("from" in filter) && !("to" in filter))).toBe(true);
+  });
+
   it("auto-reloads preview when lines per page changes", async () => {
     const user = userEvent.setup();
     render(<App />);

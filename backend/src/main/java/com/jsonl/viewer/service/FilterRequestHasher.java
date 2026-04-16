@@ -19,9 +19,7 @@ public class FilterRequestHasher {
             .append(nullToEmpty(filter.fieldPath())).append('|')
             .append(nullToEmpty(filter.op())).append('|')
             .append(nullToEmpty(filter.valueContains())).append('|')
-            .append(nullToEmpty(filter.query())).append('|')
-            .append(filter.from() == null ? "" : filter.from().toString()).append('|')
-            .append(filter.to() == null ? "" : filter.to().toString());
+            .append(nullToEmpty(filter.query()));
       }
     }
 

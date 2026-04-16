@@ -1,13 +1,11 @@
 package com.jsonl.viewer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterSpec;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -78,85 +76,43 @@ class FilterServiceTest {
   }
 
   @Test
-  void normalizeParsesTimestampWithFractionalSecondsAndZulu() {
-    FilterCriteria timestamp = normalizeTimestampFilter(
-        "2026-04-06T13:23:58.801145590Z",
-        null
-    );
+  void normalizeIgnoresUnsupportedFilterTypes() {
+    FilterSpec timestamp = new FilterSpec();
+    timestamp.setType("timestamp");
 
-    assertEquals(Instant.parse("2026-04-06T13:23:58.801145590Z"), timestamp.from());
-    assertNull(timestamp.to());
-  }
-
-  @Test
-  void normalizeParsesTimestampWithOffset() {
-    FilterCriteria timestamp = normalizeTimestampFilter(
-        "2026-04-06T13:23:58+08:00",
-        null
-    );
-
-    assertEquals(Instant.parse("2026-04-06T05:23:58Z"), timestamp.from());
-    assertNull(timestamp.to());
-  }
-
-  @Test
-  void normalizeParsesNaiveTimestampAsUtc() {
-    FilterCriteria timestamp = normalizeTimestampFilter(
-        "2026-04-06T13:23:58",
-        null
-    );
-
-    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), timestamp.from());
-    assertNull(timestamp.to());
-  }
-
-  @Test
-  void normalizeParsesSpaceSeparatedNaiveTimestampAsUtc() {
-    FilterCriteria timestamp = normalizeTimestampFilter(
-        "2026-04-06 13:23:58",
-        null
-    );
-
-    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), timestamp.from());
-    assertNull(timestamp.to());
-  }
-
-  @Test
-  void normalizeParsesEpochSecondsAndMillis() {
-    FilterCriteria timestamp = normalizeTimestampFilter(
-        "1712560000",
-        "1712560000000"
-    );
-
-    assertEquals(Instant.ofEpochSecond(1712560000L), timestamp.from());
-    assertEquals(Instant.ofEpochMilli(1712560000000L), timestamp.to());
-  }
-
-  @Test
-  void normalizeIgnoresMalformedTimestampBounds() {
-    FilterCriteria withOnlyValidUpperBound = normalizeTimestampFilter(
-        "not-a-timestamp",
-        "2026-04-06T13:23:58.801145590Z"
-    );
-    assertNull(withOnlyValidUpperBound.from());
-    assertEquals(Instant.parse("2026-04-06T13:23:58.801145590Z"), withOnlyValidUpperBound.to());
-
-    FilterSpec malformed = new FilterSpec();
-    malformed.setType("timestamp");
-    malformed.setFrom("still bad");
-    malformed.setTo("also bad");
+    FilterSpec field = new FilterSpec();
+    field.setType("field");
+    field.setFieldPath("eventTime");
+    field.setValueContains("2026");
 
     FilterCountRequest request = new FilterCountRequest();
-    request.setFilters(List.of(malformed));
+    request.setFilters(List.of(timestamp, field));
 
     List<FilterCriteria> normalized = filterService.normalize(request);
-    assertTrue(normalized.isEmpty());
+
+    assertEquals(1, normalized.size());
+    assertEquals("field", normalized.get(0).type());
+  }
+
+  @Test
+  void normalizeSupportsLegacyFieldPayloadWhenNoFiltersArrayIsProvided() {
+    FilterCountRequest request = new FilterCountRequest();
+    request.setFieldPath("traceId");
+    request.setValueContains("abc");
+
+    List<FilterCriteria> normalized = filterService.normalize(request);
+
+    assertEquals(1, normalized.size());
+    assertEquals("field", normalized.get(0).type());
+    assertEquals("traceId", normalized.get(0).fieldPath());
+    assertEquals("contains", normalized.get(0).op());
+    assertEquals("abc", normalized.get(0).valueContains());
   }
 
   @Test
   void buildFilterSqlAddsFullTextCandidateQuery() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("text", null, null, null, "worker failed", null, null)
+        new FilterCriteria("text", null, null, null, "worker failed")
     ));
 
     assertEquals(1, sql.params().size());
@@ -169,7 +125,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlIgnoresBlankTextQuery() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("text", null, null, null, "   ", null, null)
+        new FilterCriteria("text", null, null, null, "   ")
     ));
 
     assertEquals("SELECT id FROM jsonl_entry WHERE file_path = ?1", sql.candidateIdsSql());
@@ -179,7 +135,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlFieldContainsUsesFieldIndexTable() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "contains", "500", null, null, null)
+        new FilterCriteria("field", "status", "contains", "500", null)
     ));
 
     assertEquals(List.of("status", "%500%"), sql.params());
@@ -191,7 +147,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlFieldNullUsesNullPredicate() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "null", null, null, null, null)
+        new FilterCriteria("field", "status", "null", null, null)
     ));
 
     assertEquals(List.of("status"), sql.params());
@@ -201,7 +157,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlFieldNotNullUsesNotNullPredicate() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "not_null", null, null, null, null)
+        new FilterCriteria("field", "status", "not_null", null, null)
     ));
 
     assertEquals(List.of("status"), sql.params());
@@ -211,7 +167,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlFieldEmptyUsesEmptyPredicate() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "details", "empty", null, null, null, null)
+        new FilterCriteria("field", "details", "empty", null, null)
     ));
 
     assertEquals(List.of("details"), sql.params());
@@ -221,7 +177,7 @@ class FilterServiceTest {
   @Test
   void buildFilterSqlFieldNotEmptyUsesNotEmptyPredicate() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "details", "not_empty", null, null, null, null)
+        new FilterCriteria("field", "details", "not_empty", null, null)
     ));
 
     assertEquals(List.of("details"), sql.params());
@@ -231,60 +187,47 @@ class FilterServiceTest {
 
   @Test
   void buildFilterSqlOrModeUsesUnion() {
-    Instant from = Instant.parse("2026-04-06T13:23:58Z");
     FilterSql sql = filterService.buildFilterSql(
         List.of(
-            new FilterCriteria("text", null, null, null, "timeout", null, null),
-            new FilterCriteria("timestamp", null, null, null, null, from, null),
-            new FilterCriteria("field", "status", "null", null, null, null, null)
+            new FilterCriteria("text", null, null, null, "timeout"),
+            new FilterCriteria("field", "status", "null", null, null)
         ),
         "OR"
     );
 
-    assertEquals(List.of("timeout", "timestamp", from, "status"), sql.params());
+    assertEquals(List.of("timeout", "status"), sql.params());
     assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
-    assertTrue(sql.candidateIdsSql().contains("field_path = ?3"));
-    assertTrue(sql.candidateIdsSql().contains("value_ts >= ?4"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?5"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?3"));
     assertTrue(sql.candidateIdsSql().contains(" UNION "));
   }
 
   @Test
   void buildFilterSqlAndModeUsesIntersect() {
-    Instant from = Instant.parse("2026-04-06T13:23:58Z");
     FilterSql sql = filterService.buildFilterSql(
         List.of(
-            new FilterCriteria("field", "status", "null", null, null, null, null),
-            new FilterCriteria("text", null, null, null, "worker failed", null, null),
-            new FilterCriteria("timestamp", null, null, null, null, from, null),
-            new FilterCriteria("field", "details", "contains", "Auto-generated", null, null, null)
+            new FilterCriteria("field", "status", "null", null, null),
+            new FilterCriteria("text", null, null, null, "worker failed"),
+            new FilterCriteria("field", "details", "contains", "Auto-generated", null)
         ),
         "and"
     );
 
-    assertEquals(List.of("status", "worker failed", "timestamp", from, "details", "%Auto-generated%"), sql.params());
+    assertEquals(List.of("status", "worker failed", "details", "%Auto-generated%"), sql.params());
     assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
     assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?3)"));
-    assertTrue(sql.candidateIdsSql().contains("field_path = ?4"));
-    assertTrue(sql.candidateIdsSql().contains("value_ts >= ?5"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?6"));
-    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?7"));
+    assertTrue(sql.candidateIdsSql().contains("field_key = ?4"));
+    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?5"));
     assertTrue(sql.candidateIdsSql().contains(" INTERSECT "));
   }
 
   @Test
-  void buildFilterSqlTimestampUsesConfiguredFieldPath() {
-    Instant from = Instant.parse("2026-04-06T13:23:58Z");
-    Instant to = Instant.parse("2026-04-06T14:23:58Z");
+  void buildFilterSqlIgnoresUnknownTypeAndFallsBackWhenNoValidFiltersRemain() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("timestamp", "headers.eventTime", null, null, null, from, to)
+        new FilterCriteria("timestamp", "headers.eventTime", null, null, null)
     ));
 
-    assertEquals(List.of("headers.eventTime", from, to), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("FROM jsonl_entry_field_index"));
-    assertTrue(sql.candidateIdsSql().contains("field_path = ?2"));
-    assertTrue(sql.candidateIdsSql().contains("value_ts >= ?3"));
-    assertTrue(sql.candidateIdsSql().contains("value_ts <= ?4"));
+    assertEquals("SELECT id FROM jsonl_entry WHERE file_path = ?1", sql.candidateIdsSql());
+    assertTrue(sql.params().isEmpty());
   }
 
   @Test
@@ -298,20 +241,5 @@ class FilterServiceTest {
   void normalizeFiltersOpAcceptsOrCaseInsensitively() {
     assertEquals("or", filterService.normalizeFiltersOp("or"));
     assertEquals("or", filterService.normalizeFiltersOp("OR"));
-  }
-
-  private FilterCriteria normalizeTimestampFilter(String from, String to) {
-    FilterSpec spec = new FilterSpec();
-    spec.setType("timestamp");
-    spec.setFrom(from);
-    spec.setTo(to);
-
-    FilterCountRequest request = new FilterCountRequest();
-    request.setFilters(List.of(spec));
-
-    List<FilterCriteria> normalized = filterService.normalize(request);
-    assertEquals(1, normalized.size());
-    assertEquals("timestamp", normalized.get(0).type());
-    return normalized.get(0);
   }
 }

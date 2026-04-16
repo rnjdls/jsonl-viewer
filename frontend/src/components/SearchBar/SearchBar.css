@@ -51,21 +51,10 @@
   cursor: not-allowed;
 }
 
-.sb-add-btn--ts {
-  border-color: var(--yellow);
-  color: var(--yellow);
-  background: rgba(253, 224, 71, 0.06);
-}
-
 .sb-add-btn--text {
   border-color: var(--accent);
   color: var(--accent);
   background: rgba(0, 229, 160, 0.07);
-}
-
-.sb-add-btn--ts:hover {
-  background: rgba(253, 224, 71, 0.16);
-  color: #fff;
 }
 
 .sb-add-btn--text:hover {
@@ -197,7 +186,6 @@
 
 .sb-row--field     { background: rgba(77, 159, 255, 0.03); }
 .sb-row--text      { background: rgba(0, 229, 160, 0.04); }
-.sb-row--timestamp { background: rgba(253, 224, 71, 0.02); }
 
 /* ── Type badge ─────────────────────────────────────────── */
 .sb-row-type {
@@ -215,12 +203,6 @@
   background: rgba(77, 159, 255, 0.12);
   color: var(--accent2);
   border: 1px solid rgba(77, 159, 255, 0.3);
-}
-
-.sb-row-type--ts {
-  background: rgba(253, 224, 71, 0.1);
-  color: var(--yellow);
-  border: 1px solid rgba(253, 224, 71, 0.3);
 }
 
 .sb-row-type--text {
@@ -262,8 +244,6 @@
 .sb-input--field    { width: 170px; }
 .sb-input--text-query { width: min(580px, calc(100vw - 160px)); }
 .sb-input--value    { width: 230px; }
-.sb-input--ts-field { width: min(360px, calc(100vw - 180px)); }
-.sb-input--datetime { width: min(360px, calc(100vw - 160px)); }
 .sb-select--field-op { width: 130px; }
 
 /* ── Row separators ─────────────────────────────────────── */

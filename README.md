@@ -9,8 +9,8 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: returns immediate totals and deferred exact match counts for heavy filters.
 - Lazy preview with keyset pagination ("Load Preview" with Next/Prev paging).
-- Field contains filter (JSON key searched anywhere in the JSON tree), full-text search over parsed JSON, and timestamp range filter.
-- Field index stores one row per object-field occurrence, keeps metadata (`field_key`, `field_path`, null/empty/type) for the full tree, and stores `value_text` only for scalar values.
+- Field filter on indexed leaf keys under top-level `header` and `headers`, plus full-text search over parsed JSON.
+- Field index stores one row per indexed scalar leaf (`string`, `number`, `boolean`, `null`) under top-level `header` and `headers`.
 - Admin actions: reload file from start, delete all ingested rows.
 - Resumes ingestion after restart using persisted byte offsets.
 
@@ -40,7 +40,7 @@ Infra / Dev
 3. In `kafka` mode, it consumes from `KAFKA_TOPIC`.
 4. It parses each record and inserts rows into Postgres in batches.
 5. The UI requests counts and a small preview page from the backend instead of loading the full file.
-6. Filters are evaluated on the server using Postgres JSONB and timestamp columns.
+6. Filters are evaluated on the server using the field index (`jsonl_entry_field_index`) plus Postgres full-text search.
 
 ## Running With Docker Compose
 
@@ -153,10 +153,9 @@ Frontend nginx proxy timeout env vars:
   - Returns source id (`filePath`), counts from ingest state, last ingestion time, `sourceRevision`, `searchStatus` (`ready|building`), and `ingestPaused` (`true|false`).
 
 - `POST /api/filters/count`
-  - Body: `{ filters: [ { type, fieldPath, valueContains, query, from, to } ] }`
-  - For `type: "field"`, `fieldPath` is treated as a key name and matched anywhere in the JSON tree (not dot-path syntax).
+  - Body: `{ filters: [ { type, fieldPath, op, valueContains, query } ], filtersOp }`
+  - For `type: "field"`, `fieldPath` is treated as a leaf key name matched only within indexed top-level `header`/`headers` descendants.
   - For `type: "text"`, `query` is matched with Postgres full-text search over `parsed::text`.
-  - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
   - Returns `{ totalCount, matchCount, status, requestHash, sourceRevision, computedRevision, lastComputedAt }`
   - `status` is `pending|ready`; `matchCount` is `null` while pending.
 
@@ -169,8 +168,7 @@ Frontend nginx proxy timeout env vars:
   - `sortDir`: `asc | desc` (default: `desc`)
   - `limit`: page size (default: `10`, max: `500`)
   - `cursor`: opaque Base64URL cursor returned by the previous page (`null` for page 1)
-  - Field/text/timestamp filter semantics are identical to `/api/filters/count`.
-  - Timestamp payload format: `YYYY-MM-DDTHH:mm:ssZ` (UTC)
+  - Field/text filter semantics are identical to `/api/filters/count`.
   - Returns `{ rows, nextCursor }`, where each row includes:
     - `id`, `lineNo`, `ts`
     - `key` (`parsed->'key'`)
@@ -236,11 +234,10 @@ Ingest behavior note:
   - `ingest_status TEXT`
 
 - `jsonl_entry_field_index`
-  - one row per JSON key occurrence
-  - `entry_id`, `file_path`, `field_key`, `field_path`, `value_text`, `value_ts`, `value_type`, `is_null`, `is_empty`
-  - `value_text` is populated for scalar values only (string, number, boolean, null)
-  - object/array container rows keep metadata but set `value_text` to `null`
-  - `value_ts` is populated only for timestamp-like scalar field names (`timestamp`, `time`, `ts`, `date`, `*Time`, `*At`)
+  - one row per indexed scalar leaf under top-level `header` and `headers` objects
+  - `entry_id`, `file_path`, `field_key`, `field_path`, `value_text`, `value_type`, `is_null`, `is_empty`
+  - `field_key` is the leaf key name; `field_path` is the rooted path (for example `headers.eventTime`)
+  - arrays and objects are not indexed as rows
 
 - `filter_count_cache`
   - keyed by `(file_path, request_hash)`
@@ -249,7 +246,6 @@ Ingest behavior note:
 Indexes
 - `jsonl_entry(file_path, id)` for keyset pagination
 - `jsonl_entry(file_path, line_no, id)` for line sort pagination
-- `jsonl_entry(file_path, ts)` for timestamp filtering
 - `jsonl_entry_parsed_fts_idx` on `to_tsvector('simple', parsed::text)`
 - `jsonl_entry_field_index` btree indexes for key/null/empty lookups
 - `jsonl_entry_field_index` trigram GIN index on `value_text`

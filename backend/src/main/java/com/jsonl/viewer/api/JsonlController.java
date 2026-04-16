@@ -43,7 +43,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api")
 public class JsonlController {
-  private static final String FILTER_TYPE_TIMESTAMP = "timestamp";
   private static final String SORT_DIR_ASC = "asc";
   private static final String SORT_DIR_DESC = "desc";
 
@@ -132,7 +131,6 @@ public class JsonlController {
         .orElse(new IngestState(sourceId, 0, 0, null));
     FilterCountRequest safeRequest = request == null ? new FilterCountRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    validateSingleTimestampFilter(filters);
     String normalizedFiltersOp = filterService.normalizeFiltersOp(safeRequest.getFiltersOp());
     String requestHash = filterRequestHasher.hash(normalizedFiltersOp, filters);
     long sourceRevision = state.getSourceRevision();
@@ -207,7 +205,6 @@ public class JsonlController {
 
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    validateSingleTimestampFilter(filters);
     FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
 
     String sortDir = normalizeSortDir(safeRequest.getSortDir());
@@ -336,18 +333,6 @@ public class JsonlController {
       String sortDir
   ) {
     return new PreviewCursor(sortDir, row.lineNo(), row.id());
-  }
-
-  private void validateSingleTimestampFilter(List<FilterCriteria> filters) {
-    int timestampFilterCount = 0;
-    for (FilterCriteria filter : filters) {
-      if (filter.type() != null && FILTER_TYPE_TIMESTAMP.equalsIgnoreCase(filter.type())) {
-        timestampFilterCount++;
-      }
-    }
-    if (timestampFilterCount > 1) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only one timestamp filter is allowed");
-    }
   }
 
   private Long toMillis(Duration duration) {

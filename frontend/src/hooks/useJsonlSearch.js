@@ -4,16 +4,15 @@ import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
 
 let _nextId = 1;
 const nextId = () => String(_nextId++);
-const DEFAULT_TIMESTAMP_FIELD = "timestamp";
 
 /**
  * Creates a blank field filter.
  * @returns {import("../utils/search").FieldFilter}
  */
 const makeFieldFilter = () => ({
-  id:    nextId(),
-  type:  FILTER_TYPE.FIELD,
-  op:    FIELD_FILTER_OP.CONTAINS,
+  id: nextId(),
+  type: FILTER_TYPE.FIELD,
+  op: FIELD_FILTER_OP.CONTAINS,
   field: "",
   value: "",
 });
@@ -26,19 +25,6 @@ const makeTextFilter = () => ({
   id: nextId(),
   type: FILTER_TYPE.TEXT,
   query: "",
-});
-
-/**
- * Creates a blank timestamp range filter.
- * @returns {{ id: string, type: "timestamp", field: string, from: string, to: string }}
- */
-const makeTimestampFilter = (id = nextId(), hidden = false, field = DEFAULT_TIMESTAMP_FIELD) => ({
-  id,
-  type: FILTER_TYPE.TIMESTAMP,
-  field,
-  from: "",
-  to: "",
-  hidden,
 });
 
 /**
@@ -77,27 +63,6 @@ export function useJsonlSearch(lines) {
     []
   );
 
-  const addTimestampFilter = useCallback(
-    () =>
-      setFilters((prev) => {
-        const existingTimestampFilter = prev.find(
-          (filter) => filter.type === FILTER_TYPE.TIMESTAMP
-        );
-        if (existingTimestampFilter) {
-          if (existingTimestampFilter.hidden) {
-            return prev.map((filter) =>
-              filter.id === existingTimestampFilter.id
-                ? { ...filter, hidden: false, field: "" }
-                : filter
-            );
-          }
-          return prev;
-        }
-        return [...prev, makeTimestampFilter(nextId(), false, "")];
-      }),
-    []
-  );
-
   const updateFilter = useCallback((id, patch) => {
     setFilters((prev) =>
       prev.map((f) => (f.id === id ? { ...f, ...patch } : f))
@@ -105,26 +70,12 @@ export function useJsonlSearch(lines) {
   }, []);
 
   const removeFilter = useCallback((id) => {
-    setFilters((prev) => {
-      const target = prev.find((filter) => filter.id === id);
-      if (target?.type === FILTER_TYPE.TIMESTAMP) {
-        return prev.map((filter) =>
-          filter.id === id ? makeTimestampFilter(id, true) : filter
-        );
-      }
-      return prev.filter((filter) => filter.id !== id);
-    });
+    setFilters((prev) => prev.filter((filter) => filter.id !== id));
     setAppliedFilterIds((prev) => prev.filter((filterId) => filterId !== id));
   }, []);
 
   const clearAllFilters = useCallback(() => {
-    setFilters((prev) => {
-      const timestampFilter = prev.find((filter) => filter.type === FILTER_TYPE.TIMESTAMP);
-      if (!timestampFilter) {
-        return [];
-      }
-      return [makeTimestampFilter(timestampFilter.id, true)];
-    });
+    setFilters([]);
     setAppliedFilterIds([]);
   }, []);
 
@@ -138,12 +89,11 @@ export function useJsonlSearch(lines) {
     activeFilters,
     appliedFilters,
     filtered,
-    hasFilters:       filters.length > 0,
+    hasFilters: filters.length > 0,
     hasActiveFilters: activeFilters.length > 0,
     hasAppliedFilters: appliedFilters.length > 0,
     addFieldFilter,
     addTextFilter,
-    addTimestampFilter,
     setFiltersOp,
     updateFilter,
     removeFilter,

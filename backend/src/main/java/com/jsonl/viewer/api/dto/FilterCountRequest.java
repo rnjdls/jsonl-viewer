@@ -7,8 +7,6 @@ import java.util.List;
 public class FilterCountRequest {
   private String fieldPath;
   private String valueContains;
-  private String timestampFrom;
-  private String timestampTo;
   private String filtersOp;
   private List<FilterSpec> filters;
 
@@ -26,22 +24,6 @@ public class FilterCountRequest {
 
   public void setValueContains(String valueContains) {
     this.valueContains = valueContains;
-  }
-
-  public String getTimestampFrom() {
-    return timestampFrom;
-  }
-
-  public void setTimestampFrom(String timestampFrom) {
-    this.timestampFrom = timestampFrom;
-  }
-
-  public String getTimestampTo() {
-    return timestampTo;
-  }
-
-  public void setTimestampTo(String timestampTo) {
-    this.timestampTo = timestampTo;
   }
 
   public String getFiltersOp() {

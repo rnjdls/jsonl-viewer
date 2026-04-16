@@ -1,5 +1,4 @@
 import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
-const DEFAULT_TIMESTAMP_FIELD = "timestamp";
 
 /**
  * @typedef {"contains" | "null" | "not_null" | "empty" | "not_empty"} FieldFilterOp
@@ -10,17 +9,8 @@ const DEFAULT_TIMESTAMP_FIELD = "timestamp";
  * @property {string} id
  * @property {"field"} type
  * @property {FieldFilterOp} op
- * @property {string} field   - JSON key name to search anywhere in the tree.
- * @property {string} value   - Partial match string.
- */
-
-/**
- * @typedef {Object} TimestampFilter
- * @property {string} id
- * @property {"timestamp"} type
- * @property {string} field   - Dot-notation path to the timestamp field.
- * @property {string} from    - ISO date string (inclusive lower bound).
- * @property {string} to      - ISO date string (inclusive upper bound).
+ * @property {string} field - Leaf key indexed under top-level header/headers roots.
+ * @property {string} value - Partial match string.
  */
 
 /**
@@ -30,38 +20,38 @@ const DEFAULT_TIMESTAMP_FIELD = "timestamp";
  * @property {string} query
  */
 
-/** @typedef {FieldFilter | TimestampFilter | TextFilter} Filter */
+/** @typedef {FieldFilter | TextFilter} Filter */
 /** @typedef {"and" | "or"} FiltersOp */
 
-/**
- * Reads a value from a nested object using a dot-notation path string.
- * e.g. getByPath({ a: { b: 1 } }, "a.b") => 1
- *
- * @param {Object} obj
- * @param {string} path
- * @returns {*}
- */
-export function getByPath(obj, path) {
-  return path.split(".").reduce((cur, key) => cur?.[key], obj);
-}
-
-function getValuesByKeyAnywhere(node, key, out = []) {
-  if (node === null || node === undefined) return out;
-
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      getValuesByKeyAnywhere(item, key, out);
-    }
+function collectHeaderLeafValuesByKey(node, key, out = []) {
+  if (node === null || node === undefined || Array.isArray(node) || typeof node !== "object") {
     return out;
   }
 
-  if (typeof node !== "object") return out;
-
   for (const [entryKey, entryValue] of Object.entries(node)) {
+    if (entryValue !== null && typeof entryValue === "object") {
+      if (!Array.isArray(entryValue)) {
+        collectHeaderLeafValuesByKey(entryValue, key, out);
+      }
+      continue;
+    }
+
     if (entryKey === key) {
       out.push(entryValue);
     }
-    getValuesByKeyAnywhere(entryValue, key, out);
+  }
+  return out;
+}
+
+function getIndexedHeaderLeafValuesByKey(parsed, key) {
+  if (!parsed || typeof parsed !== "object") {
+    return [];
+  }
+
+  const out = [];
+  for (const rootKey of ["header", "headers"]) {
+    const root = parsed[rootKey];
+    collectHeaderLeafValuesByKey(root, key, out);
   }
   return out;
 }
@@ -97,10 +87,7 @@ function normalizeFiltersOp(rawOp) {
 }
 
 function isEmptyFieldValue(value) {
-  if (value === "") return true;
-  if (Array.isArray(value)) return value.length === 0;
-  if (value && typeof value === "object") return Object.keys(value).length === 0;
-  return false;
+  return value === "";
 }
 
 /**
@@ -119,7 +106,7 @@ function entryMatchesFilter(entry, filter) {
     if (!fieldKey) return true;
     const op = normalizeFieldFilterOp(filter.op);
 
-    const values = getValuesByKeyAnywhere(entry.parsed, fieldKey);
+    const values = getIndexedHeaderLeafValuesByKey(entry.parsed, fieldKey);
     if (values.length === 0) return false;
 
     if (op === FIELD_FILTER_OP.NULL) {
@@ -142,22 +129,6 @@ function entryMatchesFilter(entry, filter) {
     return values.some((entryValue) =>
       toSearchableText(entryValue).toLowerCase().includes(needle)
     );
-  }
-
-  if (filter.type === FILTER_TYPE.TIMESTAMP) {
-    const { field, from, to } = filter;
-    const effectiveField = (field ?? "").trim() || DEFAULT_TIMESTAMP_FIELD;
-
-    const raw = getByPath(entry.parsed, effectiveField);
-    if (raw === undefined || raw === null) return false;
-
-    const ts = new Date(raw).getTime();
-    if (Number.isNaN(ts)) return false;
-
-    const fromMs = from ? new Date(from).getTime() : -Infinity;
-    const toMs   = to   ? new Date(to).getTime()   : +Infinity;
-
-    return ts >= fromMs && ts <= toMs;
   }
 
   if (filter.type === FILTER_TYPE.TEXT) {
@@ -204,9 +175,6 @@ export function isFilterActive(filter) {
   }
   if (filter.type === FILTER_TYPE.FIELD) {
     return filter.field.trim().length > 0;
-  }
-  if (filter.type === FILTER_TYPE.TIMESTAMP) {
-    return !!filter.from || !!filter.to;
   }
   if (filter.type === FILTER_TYPE.TEXT) {
     return (filter.query ?? "").trim().length > 0;
