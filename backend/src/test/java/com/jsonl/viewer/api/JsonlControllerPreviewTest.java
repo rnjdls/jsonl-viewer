@@ -29,6 +29,7 @@ import com.jsonl.viewer.service.FilterRequestHasher;
 import com.jsonl.viewer.service.FilterService;
 import com.jsonl.viewer.service.PreviewCursorCodec;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -113,6 +114,36 @@ class JsonlControllerPreviewTest {
     assertEquals("parse failed", response.rows().get(0).error());
     assertEquals("{\"raw\":1}", response.rows().get(0).rawSnippet());
     assertEquals(true, response.rows().get(0).rawTruncated());
+    assertNotNull(response.nextCursor());
+  }
+
+  @Test
+  void previewCapsResponseRowsToRequestedLimit() {
+    AppProperties properties = appProperties();
+    JsonlEntryRepository repository = org.mockito.Mockito.mock(JsonlEntryRepository.class);
+    List<JsonlEntryRow> oversizedRows = new ArrayList<>();
+    for (int i = 1; i <= 11; i++) {
+      oversizedRows.add(new JsonlEntryRow(i, i, null, null, null, null, null, null));
+    }
+    when(repository.preview(any(), any(), any(), any(), anyInt(), nullable(Long.class)))
+        .thenReturn(oversizedRows);
+
+    IngestStateRepository ingestStateRepository = org.mockito.Mockito.mock(IngestStateRepository.class);
+    when(ingestStateRepository.findById(jsonlFilePath(properties))).thenReturn(Optional.empty());
+    JsonlController controller = controller(
+        properties,
+        repository,
+        ingestStateRepository,
+        new PreviewCursorCodec(new ObjectMapper())
+    );
+
+    PreviewRequest request = new PreviewRequest();
+    request.setLimit(10);
+    PreviewResponse response = controller.preview(request);
+
+    assertEquals(10, response.rows().size());
+    assertEquals(1L, response.rows().get(0).id());
+    assertEquals(10L, response.rows().get(9).id());
     assertNotNull(response.nextCursor());
   }
 

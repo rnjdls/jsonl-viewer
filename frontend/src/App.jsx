@@ -31,6 +31,7 @@ import "./App.css";
 
 const DEFAULT_PREVIEW_LIMIT = 10;
 const DEFAULT_SORT_DIR = "desc";
+const INITIAL_PREVIEW_REFRESH_INTERVAL_MS = 3000;
 const LOCAL_STORAGE_TIMEZONE_KEY = "jsonlLive.timeZone";
 const ADMIN_ACTION = {
   RELOAD: "reload",
@@ -113,6 +114,7 @@ export default function App() {
   const [nextCursor, setNextCursor] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
+  const [initialPageAutoRefreshMode, setInitialPageAutoRefreshMode] = useState(false);
   const [entryDetailsById, setEntryDetailsById] = useState({});
   const [entryDetailsLoadingById, setEntryDetailsLoadingById] = useState({});
   const [entryRawById, setEntryRawById] = useState({});
@@ -138,6 +140,9 @@ export default function App() {
   const copyResetTimersRef = useRef({});
   const copyInFlightByIdRef = useRef({});
   const autoPreviewRunKeyRef = useRef("");
+  const initialPageAutoRefreshTimerRef = useRef(null);
+  const initialPageAutoRefreshEligibleRef = useRef(true);
+  const latestSourceKeyRef = useRef(null);
 
   const clearAllCopyResetTimers = useCallback(() => {
     Object.values(copyResetTimersRef.current).forEach((timerId) => {
@@ -153,6 +158,19 @@ export default function App() {
       delete copyResetTimersRef.current[id];
     }
   }, []);
+
+  const clearInitialPageAutoRefreshTimer = useCallback(() => {
+    if (initialPageAutoRefreshTimerRef.current !== null) {
+      clearTimeout(initialPageAutoRefreshTimerRef.current);
+      initialPageAutoRefreshTimerRef.current = null;
+    }
+  }, []);
+
+  const leaveInitialPageAutoRefreshContext = useCallback(() => {
+    initialPageAutoRefreshEligibleRef.current = false;
+    clearInitialPageAutoRefreshTimer();
+    setInitialPageAutoRefreshMode(false);
+  }, [clearInitialPageAutoRefreshTimer]);
 
   const {
     filters,
@@ -174,6 +192,8 @@ export default function App() {
 
   const resetPreviewState = useCallback(() => {
     clearAllCopyResetTimers();
+    clearInitialPageAutoRefreshTimer();
+    setInitialPageAutoRefreshMode(false);
     setPreviewRows([]);
     setCursorHistory([null]);
     setPageIndex(0);
@@ -187,13 +207,14 @@ export default function App() {
     setExpandedById({});
     setJsonTreeExpandTokenById({});
     copyInFlightByIdRef.current = {};
-  }, [clearAllCopyResetTimers]);
+  }, [clearAllCopyResetTimers, clearInitialPageAutoRefreshTimer]);
 
   useEffect(
     () => () => {
       clearAllCopyResetTimers();
+      clearInitialPageAutoRefreshTimer();
     },
-    [clearAllCopyResetTimers]
+    [clearAllCopyResetTimers, clearInitialPageAutoRefreshTimer]
   );
 
   useEffect(() => {
@@ -287,12 +308,32 @@ export default function App() {
 
   useEffect(() => {
     if (!stats?.filePath) {
+      if (latestSourceKeyRef.current !== null) {
+        latestSourceKeyRef.current = null;
+        leaveInitialPageAutoRefreshContext();
+      }
       setCounts(null);
       setPendingCountRequestHash(null);
       return;
     }
     refreshCounts(filterPayload);
-  }, [stats?.filePath, refreshCounts]);
+  }, [leaveInitialPageAutoRefreshContext, refreshCounts, stats?.filePath]);
+
+  useEffect(() => {
+    if (!stats?.filePath) {
+      return;
+    }
+
+    const sourceKey = stats.filePath;
+    if (latestSourceKeyRef.current === null) {
+      latestSourceKeyRef.current = sourceKey;
+      return;
+    }
+    if (latestSourceKeyRef.current !== sourceKey) {
+      latestSourceKeyRef.current = sourceKey;
+      leaveInitialPageAutoRefreshContext();
+    }
+  }, [leaveInitialPageAutoRefreshContext, stats?.filePath]);
 
   useEffect(() => {
     if (!pendingCountRequestHash || !stats?.filePath) {
@@ -375,6 +416,7 @@ export default function App() {
 
   const handleSearch = useCallback(async () => {
     if (uiLocked) return;
+    leaveInitialPageAutoRefreshContext();
     applyFilters();
     resetPreviewState();
     const nextCounts = await refreshCounts(activeFilterPayload);
@@ -398,32 +440,46 @@ export default function App() {
     stats?.filePath,
     stats?.totalCount,
     uiLocked,
+    leaveInitialPageAutoRefreshContext,
   ]);
+
+  useEffect(() => {
+    if (uiLocked) {
+      leaveInitialPageAutoRefreshContext();
+    }
+  }, [leaveInitialPageAutoRefreshContext, uiLocked]);
 
   useEffect(() => {
     if (!stats?.filePath || uiLocked || previewActive || previewLoading) {
       return;
     }
 
-    const sourceRevision = counts?.sourceRevision ?? stats?.sourceRevision ?? 0;
+    const sourceRevision = hasAppliedFilters
+      ? (counts?.sourceRevision ?? stats?.sourceRevision ?? 0)
+      : (stats?.sourceRevision ?? counts?.sourceRevision ?? 0);
     const autoPreviewKey = `${stats.filePath}::${sourceRevision}`;
     if (autoPreviewRunKeyRef.current === autoPreviewKey) {
       return;
     }
 
     const totalFromCounts = counts?.totalCount;
-    const totalForAutoPreview =
-      (typeof totalFromCounts === "number" ? totalFromCounts : stats?.totalCount) ?? 0;
+    const totalForAutoPreview = hasAppliedFilters
+      ? ((typeof totalFromCounts === "number" ? totalFromCounts : stats?.totalCount) ?? 0)
+      : ((typeof stats?.totalCount === "number" ? stats.totalCount : totalFromCounts) ?? 0);
     if (totalForAutoPreview <= 0) {
       return;
     }
 
+    const shouldKeepInitialPageAutoRefreshMode =
+      initialPageAutoRefreshEligibleRef.current && !hasAppliedFilters;
+    setInitialPageAutoRefreshMode(shouldKeepInitialPageAutoRefreshMode);
     autoPreviewRunKeyRef.current = autoPreviewKey;
     fetchPreviewPage(null, 0);
   }, [
     counts?.sourceRevision,
     counts?.totalCount,
     fetchPreviewPage,
+    hasAppliedFilters,
     previewActive,
     previewLimit,
     previewLoading,
@@ -434,25 +490,80 @@ export default function App() {
     uiLocked,
   ]);
 
+  useEffect(() => {
+    clearInitialPageAutoRefreshTimer();
+    if (!initialPageAutoRefreshMode) {
+      return;
+    }
+    if (!stats?.filePath || hasAppliedFilters || pageIndex !== 0 || uiLocked || previewLoading) {
+      return;
+    }
+    if ((cursorHistory[0] ?? null) !== null) {
+      return;
+    }
+
+    const currentPageSize = previewRows.length;
+    const totalRows = stats?.totalCount ?? 0;
+    const isLinePageMatch = currentPageSize === previewLimit || currentPageSize >= totalRows;
+    if (isLinePageMatch) {
+      return;
+    }
+
+    initialPageAutoRefreshTimerRef.current = window.setTimeout(() => {
+      fetchPreviewPage(null, 0);
+    }, INITIAL_PREVIEW_REFRESH_INTERVAL_MS);
+  }, [
+    clearInitialPageAutoRefreshTimer,
+    cursorHistory,
+    fetchPreviewPage,
+    hasAppliedFilters,
+    initialPageAutoRefreshMode,
+    pageIndex,
+    previewLimit,
+    previewLoading,
+    previewRows.length,
+    stats?.filePath,
+    stats?.totalCount,
+    uiLocked,
+  ]);
+
   const handleLoadPreview = useCallback(async () => {
     if (uiLocked) return;
+    leaveInitialPageAutoRefreshContext();
     await fetchPreviewPage(null, 0);
-  }, [fetchPreviewPage, uiLocked]);
+  }, [fetchPreviewPage, leaveInitialPageAutoRefreshContext, uiLocked]);
 
   const handleNextPage = useCallback(async () => {
     if (uiLocked || !previewActive || !nextCursor) return;
+    leaveInitialPageAutoRefreshContext();
     await fetchPreviewPage(nextCursor, pageIndex + 1);
-  }, [fetchPreviewPage, nextCursor, pageIndex, previewActive, uiLocked]);
+  }, [
+    fetchPreviewPage,
+    leaveInitialPageAutoRefreshContext,
+    nextCursor,
+    pageIndex,
+    previewActive,
+    uiLocked,
+  ]);
 
   const handlePrevPage = useCallback(async () => {
     if (uiLocked || !previewActive || pageIndex === 0) return;
+    leaveInitialPageAutoRefreshContext();
     const prevCursor = cursorHistory[pageIndex - 1] ?? null;
     await fetchPreviewPage(prevCursor, pageIndex - 1);
-  }, [cursorHistory, fetchPreviewPage, pageIndex, previewActive, uiLocked]);
+  }, [
+    cursorHistory,
+    fetchPreviewPage,
+    leaveInitialPageAutoRefreshContext,
+    pageIndex,
+    previewActive,
+    uiLocked,
+  ]);
 
   const handlePageSelectChange = useCallback(
     async (event) => {
       if (uiLocked || !previewActive) return;
+      leaveInitialPageAutoRefreshContext();
       const requestedPage = Number.parseInt(event.target.value, 10);
       if (Number.isNaN(requestedPage) || requestedPage < 1) return;
 
@@ -480,30 +591,40 @@ export default function App() {
 
       await fetchPreviewPage(targetCursor ?? null, targetPageIndex, workingHistory);
     },
-    [cursorHistory, fetchPreviewPage, pageIndex, previewActive, requestPreviewPage, uiLocked]
+    [
+      cursorHistory,
+      fetchPreviewPage,
+      leaveInitialPageAutoRefreshContext,
+      pageIndex,
+      previewActive,
+      requestPreviewPage,
+      uiLocked,
+    ]
   );
 
   const handleSortDirChange = useCallback(
     (event) => {
       if (uiLocked) return;
+      leaveInitialPageAutoRefreshContext();
       const nextSortDir = event.target.value;
       autoPreviewRunKeyRef.current = "";
       setPreviewSortDir(nextSortDir);
       resetPreviewState();
     },
-    [resetPreviewState, uiLocked]
+    [leaveInitialPageAutoRefreshContext, resetPreviewState, uiLocked]
   );
 
   const handlePreviewLimitChange = useCallback(
     (event) => {
       if (uiLocked) return;
+      leaveInitialPageAutoRefreshContext();
       const nextLimit = Number.parseInt(event.target.value, 10);
       if (Number.isNaN(nextLimit)) return;
       autoPreviewRunKeyRef.current = "";
       setPreviewLimit(nextLimit);
       resetPreviewState();
     },
-    [resetPreviewState, uiLocked]
+    [leaveInitialPageAutoRefreshContext, resetPreviewState, uiLocked]
   );
 
   const handleLoadBody = useCallback(
@@ -619,6 +740,7 @@ export default function App() {
 
     setAdminActionConfirming(null);
     setAdminActionExecuting(adminActionConfirming);
+    leaveInitialPageAutoRefreshContext();
     setUiLocked(true);
 
     try {
@@ -633,7 +755,15 @@ export default function App() {
       setAdminActionExecuting(null);
       setUiLocked(false);
     }
-  }, [adminActionConfirming, filterPayload, refreshCounts, refreshStats, resetPreviewState, uiLocked]);
+  }, [
+    adminActionConfirming,
+    filterPayload,
+    leaveInitialPageAutoRefreshContext,
+    refreshCounts,
+    refreshStats,
+    resetPreviewState,
+    uiLocked,
+  ]);
 
   const handlePauseToggle = useCallback(async () => {
     if (uiLocked) return;
@@ -664,7 +794,9 @@ export default function App() {
   const executingAdminActionMeta = adminActionExecuting
     ? ADMIN_ACTION_META[adminActionExecuting]
     : null;
-  const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
+  const totalCount = hasAppliedFilters
+    ? (counts?.totalCount ?? stats?.totalCount ?? 0)
+    : (stats?.totalCount ?? counts?.totalCount ?? 0);
   const exactMatchReady =
     counts?.status === "ready"
     && counts?.computedRevision === counts?.sourceRevision;
@@ -681,11 +813,13 @@ export default function App() {
     ? "backend-offline"
     : !stats?.filePath
       ? "no-file"
-      : counts && totalCount === 0
+      : !hasAppliedFilters && (stats?.totalCount ?? 0) === 0
         ? "empty-file"
-        : counts && exactMatchReady && matchCount === 0 && hasAppliedFilters
-          ? "no-results"
-          : null;
+        : hasAppliedFilters && counts && totalCount === 0
+          ? "empty-file"
+          : counts && exactMatchReady && matchCount === 0 && hasAppliedFilters
+            ? "no-results"
+            : null;
 
   return (
     <div className={`app ${uiLocked ? "app--busy" : ""}`} aria-busy={uiLocked}>

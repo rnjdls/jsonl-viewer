@@ -225,7 +225,8 @@ public class JsonlController {
         limit,
         toMillis(properties.getPreviewStatementTimeout())
     );
-    List<PreviewRow> responseRows = rows.stream()
+    List<JsonlEntryRow> pageRows = rows.size() > limit ? rows.subList(0, limit) : rows;
+    List<PreviewRow> responseRows = pageRows.stream()
         .map(row -> new PreviewRow(
             row.id(),
             row.lineNo(),
@@ -240,7 +241,7 @@ public class JsonlController {
 
     String nextCursor = responseRows.size() == limit
         ? previewCursorCodec.encode(
-            toPreviewCursor(rows.get(rows.size() - 1), sortDir)
+            toPreviewCursor(pageRows.get(pageRows.size() - 1), sortDir)
         )
         : null;
 

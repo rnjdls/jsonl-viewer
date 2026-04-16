@@ -47,6 +47,10 @@ const EMPTY_COUNTS = {
   matchCount: 0,
 };
 
+function createPreviewRows(count, startId = 1) {
+  return Array.from({ length: count }, (_, index) => ({ id: startId + index }));
+}
+
 function deferred() {
   let resolve;
   let reject;
@@ -336,5 +340,198 @@ describe("App admin confirmations and lock", () => {
     await waitFor(() => {
       expect(api.getPreview).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("App initial preview auto-refresh", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.clearAllMocks();
+    api.getStats.mockResolvedValue(BASE_STATS);
+    api.getCounts.mockResolvedValue(READY_COUNTS);
+    api.getCountStatus.mockResolvedValue(READY_COUNTS);
+    api.getPreview.mockResolvedValue({ rows: createPreviewRows(10), nextCursor: null });
+    api.getEntry.mockResolvedValue({ parsed: { foo: "bar" }, error: null });
+    api.getEntryRaw.mockResolvedValue("{\"foo\":\"bar\"}");
+    api.pauseIngestion.mockResolvedValue(null);
+    api.resumeIngestion.mockResolvedValue(null);
+    api.reloadData.mockResolvedValue(null);
+    api.resetData.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it("retries initial page 1 until the rendered rows match stats total count", async () => {
+    api.getStats.mockResolvedValue({ ...BASE_STATS, totalCount: 5 });
+    api.getCounts.mockResolvedValue({ ...READY_COUNTS, totalCount: 5, matchCount: 5 });
+    api.getPreview
+      .mockResolvedValueOnce({ rows: createPreviewRows(4), nextCursor: null })
+      .mockResolvedValue({ rows: createPreviewRows(5), nextCursor: null });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.getPreview).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops retrying once page 1 reaches min(linesPerPage, stats.totalCount)", async () => {
+    api.getStats.mockResolvedValue({ ...BASE_STATS, totalCount: 20 });
+    api.getCounts.mockResolvedValue({ ...READY_COUNTS, totalCount: 20, matchCount: 20 });
+    api.getPreview.mockResolvedValue({ rows: createPreviewRows(10), nextCursor: "cursor-2" });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(api.getPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-arms retrying when stats polling raises total count above rendered page 1 rows", async () => {
+    api.getStats
+      .mockResolvedValueOnce({ ...BASE_STATS, totalCount: 8, sourceRevision: 2 })
+      .mockResolvedValueOnce({ ...BASE_STATS, totalCount: 9, sourceRevision: 3 })
+      .mockResolvedValue({ ...BASE_STATS, totalCount: 9, sourceRevision: 3 });
+    api.getCounts.mockResolvedValue({ ...READY_COUNTS, totalCount: 8, matchCount: 8 });
+    api.getPreview
+      .mockResolvedValueOnce({ rows: createPreviewRows(8), nextCursor: null })
+      .mockResolvedValue({ rows: createPreviewRows(9), nextCursor: null });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => {
+      expect(api.getStats).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getPreview).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("auto-loads preview when stats total grows from zero even if counts remains stale", async () => {
+    api.getStats
+      .mockResolvedValueOnce({ ...BASE_STATS, totalCount: 0, sourceRevision: 2 })
+      .mockResolvedValue({ ...BASE_STATS, totalCount: 1, sourceRevision: 3 });
+    api.getCounts.mockResolvedValue({ ...READY_COUNTS, totalCount: 0, matchCount: 0, sourceRevision: 2 });
+    api.getPreview.mockResolvedValue({ rows: createPreviewRows(1), nextCursor: null });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(api.getCounts).toHaveBeenCalled();
+    });
+    expect(api.getPreview).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => {
+      expect(api.getStats).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("No data yet")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("LINE 1")).toBeInTheDocument();
+  });
+
+  it("does not use the retry loop for manual reload, search, direction, lines/page, or paging", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    api.getStats.mockResolvedValue({ ...BASE_STATS, totalCount: 20 });
+    api.getCounts.mockResolvedValue({ ...READY_COUNTS, totalCount: 20, matchCount: 20 });
+    api.getPreview
+      .mockResolvedValueOnce({ rows: createPreviewRows(10), nextCursor: "cursor-2" })
+      .mockResolvedValueOnce({ rows: createPreviewRows(10, 11), nextCursor: "cursor-2" })
+      .mockResolvedValueOnce({ rows: createPreviewRows(10), nextCursor: "cursor-2" })
+      .mockResolvedValueOnce({ rows: createPreviewRows(10), nextCursor: "cursor-2" })
+      .mockResolvedValueOnce({ rows: createPreviewRows(10, 21), nextCursor: null })
+      .mockResolvedValueOnce({ rows: createPreviewRows(20), nextCursor: null });
+
+    render(<App />);
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Reload Preview" }));
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.getPreview).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "level");
+    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(3);
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.getPreview).toHaveBeenCalledTimes(3);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Direction" }), "asc");
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(4);
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.getPreview).toHaveBeenCalledTimes(4);
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(5);
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.getPreview).toHaveBeenCalledTimes(5);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Lines/page" }), "25");
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(6);
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(api.getPreview).toHaveBeenCalledTimes(6);
+  });
+
+  it("stops retrying once the user leaves initial page-1 auto-preview context", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    api.getStats.mockResolvedValue({ ...BASE_STATS, totalCount: 5 });
+    api.getCounts.mockResolvedValue({ ...READY_COUNTS, totalCount: 5, matchCount: 5 });
+    api.getPreview
+      .mockResolvedValueOnce({ rows: createPreviewRows(4), nextCursor: null })
+      .mockResolvedValue({ rows: createPreviewRows(5), nextCursor: null });
+
+    render(<App />);
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await user.click(screen.getByRole("button", { name: "Reload Preview" }));
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(api.getPreview).toHaveBeenCalledTimes(2);
   });
 });
