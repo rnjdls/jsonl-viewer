@@ -30,6 +30,10 @@ import org.springframework.stereotype.Service;
 public class MockJsonlGeneratorService {
 
   private static final Logger log = LoggerFactory.getLogger(MockJsonlGeneratorService.class);
+  private static final int MIN_TOP_LEVEL_FIELDS = 50;
+  private static final int MIN_OBJECT_DEPTH = 20;
+  private static final String DEEP_PAYLOAD_FIELD = "deepPayload";
+  private static final String SYNTHETIC_FIELD_PREFIX = "extraField";
   private static final List<String> FALLBACK_USERS = buildFallbackUsers();
   private static final List<String> FALLBACK_ACTIONS = List.of("access", "create", "update", "delete");
   private static final double FALLBACK_MIN_VALUE = 100.0d;
@@ -258,6 +262,43 @@ public class MockJsonlGeneratorService {
       if (headers.has("environment") && isBlankNode(headers.get("environment"))) {
         headers.put("environment", toBase64(FALLBACK_ENVIRONMENT));
       }
+    }
+
+    ensureDepth(entry, id, timestamp);
+    ensureMinimumTopLevelFields(entry, id);
+  }
+
+  private void ensureDepth(ObjectNode entry, long id, String timestamp) {
+    int chainDepth = Math.max(1, MIN_OBJECT_DEPTH - 1);
+    ObjectNode chainRoot = objectMapper.createObjectNode();
+    ObjectNode cursor = chainRoot;
+
+    for (int level = 1; level <= chainDepth; level++) {
+      cursor.put("depth", level);
+      cursor.put("nodeId", "node-" + id + "-" + level);
+
+      if (level == chainDepth) {
+        cursor.put("leafTimestamp", timestamp);
+        cursor.put("leafValue", randomValue());
+        continue;
+      }
+
+      ObjectNode child = objectMapper.createObjectNode();
+      cursor.set("child", child);
+      cursor = child;
+    }
+
+    entry.set(DEEP_PAYLOAD_FIELD, chainRoot);
+  }
+
+  private void ensureMinimumTopLevelFields(ObjectNode entry, long id) {
+    int index = 1;
+    while (entry.size() < MIN_TOP_LEVEL_FIELDS) {
+      String fieldName = SYNTHETIC_FIELD_PREFIX + index++;
+      if (entry.has(fieldName)) {
+        continue;
+      }
+      entry.put(fieldName, "synthetic-" + id + "-" + fieldName);
     }
   }
 
