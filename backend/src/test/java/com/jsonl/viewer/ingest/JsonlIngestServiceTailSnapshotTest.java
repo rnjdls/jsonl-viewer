@@ -53,6 +53,7 @@ class JsonlIngestServiceTailSnapshotTest {
       AppProperties properties = new AppProperties();
       properties.setJsonlFilePath(jsonlFile.toString());
       properties.setIngestBatchSize(1);
+      properties.setIngestMaxBytesPerPass(3L * 1024 * 1024);
 
       JsonlEntryRepository jsonlEntryRepository = mock(JsonlEntryRepository.class);
       IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);

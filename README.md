@@ -4,7 +4,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 
 ## Features
 
-- Backend ingests a JSONL file from a configured path and tails new lines.
+- Backend ingests a JSONL file from a configured path and tails new lines in bounded passes.
 - Optional Kafka ingest mode consumes one JSON object per Kafka message.
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: returns immediate totals and deferred exact match counts for heavy filters.
@@ -36,7 +36,7 @@ Infra / Dev
 ## How It Works
 
 1. The backend chooses ingest mode from `INGEST_MODE` (`file` by default).
-2. In `file` mode, it reads and tails `JSONL_FILE_PATH`.
+2. In `file` mode, it reads and tails `JSONL_FILE_PATH` in bounded passes (default: about `3 MiB` of raw input per pass, checked at line boundaries).
 3. In `kafka` mode, it consumes from `KAFKA_TOPIC`.
 4. It parses each record and inserts rows into Postgres in batches.
 5. The UI requests counts and a small preview page from the backend instead of loading the full file.
@@ -65,6 +65,8 @@ Postgres in `docker-compose.yml` is started with `max_wal_size=1GB` to reduce ch
 docker compose -f docker-compose.yml -f docker-compose.generated.yml up --build
 ```
 
+The optional generated-data profile can still produce data faster than bounded file-mode ingest can consume it, which may create backlog while the generator is running.
+
 Services
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:8080`
@@ -87,8 +89,9 @@ Backend environment variables (Docker Compose defaults shown in `docker-compose.
 - `INGEST_MODE` (default: `file`): `file` or `kafka`.
 - `INGEST_SOURCE_ID` (optional, Kafka mode only): logical source id used for API `stats.filePath` and DB scoping. Default is `kafka:<topic>`.
 - `JSONL_FILE_PATH` (required): path to the JSONL file inside the backend container.
-- `INGEST_POLL_INTERVAL_MS` (default: `1000`): polling interval in ms.
-- `INGEST_BATCH_SIZE` (default: `500`): insert batch size.
+- `INGEST_POLL_INTERVAL_MS` (default: `500`): polling interval in ms.
+- `INGEST_BATCH_SIZE` (default: `500`): JPA flush batch size for inserts (not a per-pass ingest cap).
+- `INGEST_MAX_BYTES_PER_PASS` (default: `3145728`): soft cap on raw bytes consumed per file-mode pass (checked at line boundaries; a single oversized first line is still ingested to ensure forward progress).
 - `APP_PREVIEW_STATEMENT_TIMEOUT` (default: `20s`): statement timeout for preview queries.
 - `APP_COUNT_JOB_STATEMENT_TIMEOUT` (default: `10m`): statement timeout for background exact-count jobs.
 - `SPRING_MVC_ASYNC_REQUEST_TIMEOUT` (default: `305s`): async MVC request timeout guardrail.

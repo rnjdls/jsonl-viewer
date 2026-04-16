@@ -53,7 +53,10 @@ class MockJsonlGeneratorServiceTest {
     JsonNode generated = mapper.readTree(lines.get(0));
     assertTrue(generated.isObject());
     assertTrue(generated.size() >= 50);
-    assertEquals(20, maxDepth(generated));
+    assertEquals(20, maxDepth(generated.path("deepPayload")));
+    assertEquals(50, maxDepth(generated.path("deepPayloadDepth50A")));
+    assertEquals(50, maxDepth(generated.path("deepPayloadDepth50B")));
+    assertEquals(50, maxDepth(generated.path("deepPayloadDepth50C")));
 
     assertEquals(1L, generated.path("id").asLong());
 
