@@ -33,7 +33,10 @@ rsync -a \
   --exclude "docs/" \
   --exclude "skills/" \
   --exclude "docker-compose.generated.yml" \
-  --exclude "AGENT.md" \
+  --exclude "backend/target/" \
+  --exclude "frontend/coverage/" \
+  --exclude "frontend/dist/" \
+  --exclude "frontend/node_modules/" \
   --exclude "AGENTS.md" \
   --exclude "SKILLS.md" \
   --exclude ".DS_Store" \

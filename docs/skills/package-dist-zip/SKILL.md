@@ -6,6 +6,10 @@ Create a distribution zip of this repo **without**:
 - `docs/`
 - `skills/`
 - `docker-compose.generated.yml`
+- `backend/target/`
+- `frontend/coverage/`
+- `frontend/dist/`
+- `frontend/node_modules/`
 - `AGENTS.md`
 - `SKILLS.md`
 - Git-related files (e.g. `.git/`, `.gitignore`, `.gitattributes`, `.gitmodules`, `.github/`)

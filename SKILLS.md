@@ -10,6 +10,6 @@ This repo includes a small set of reusable “skills” (agent workflows) as fol
 
 ## `package-dist-zip`
 
-- **When to use**: You want a shareable zip of the repo that excludes `mock-generator/`, `docs/`, `docker-compose.generated.yml`, `AGENTS.md`, `SKILLS.md`, and git-related files.
+- **When to use**: You want a shareable zip of the repo that excludes `mock-generator/`, `docs/`, `docker-compose.generated.yml`, `backend/target/`, `frontend/coverage/`, `frontend/dist/`, `frontend/node_modules/`, `AGENTS.md`, `SKILLS.md`, and git-related files.
 - **Skill file**: `docs/skills/package-dist-zip/SKILL.md`
 - **Helper script**: `docs/skills/package-dist-zip/scripts/package_dist_zip.sh`
