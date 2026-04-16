@@ -61,11 +61,6 @@ function getCopyLabel(copyStatus) {
   return "Copy";
 }
 
-function toTimestampPayload(value) {
-  const trimmed = (value ?? "").trim();
-  return trimmed || undefined;
-}
-
 function toFilterPayload(filters, filtersOp) {
   if (!filters || filters.length === 0) {
     return { filtersOp, filters: [] };
@@ -89,13 +84,8 @@ function toFilterPayload(filters, filtersOp) {
           query: filter.query,
         };
       }
-      return {
-        type: "timestamp",
-        fieldPath: filter.field,
-        from: toTimestampPayload(filter.from),
-        to: toTimestampPayload(filter.to),
-      };
-    }),
+      return null;
+    }).filter(Boolean),
   };
 }
 
@@ -164,7 +154,6 @@ export default function App() {
     hasAppliedFilters,
     addFieldFilter,
     addTextFilter,
-    addTimestampFilter,
     setFiltersOp,
     updateFilter,
     removeFilter,
@@ -722,7 +711,6 @@ export default function App() {
         globalDisabled={uiLocked}
         onAddFieldFilter={addFieldFilter}
         onAddTextFilter={addTextFilter}
-        onAddTimestampFilter={addTimestampFilter}
         onUpdateFilter={updateFilter}
         onRemoveFilter={removeFilter}
         onFiltersOpChange={setFiltersOp}

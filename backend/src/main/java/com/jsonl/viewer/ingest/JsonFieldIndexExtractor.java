@@ -2,73 +2,65 @@ package com.jsonl.viewer.ingest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
-import com.jsonl.viewer.service.TimestampParser;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
 public class JsonFieldIndexExtractor {
-  private static final Instant POSTGRES_TIMESTAMPTZ_MIN =
-      LocalDateTime.of(-4712, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC);
-  private static final Instant POSTGRES_TIMESTAMPTZ_MAX =
-      LocalDateTime.of(294276, 12, 31, 23, 59, 59, 999_999_000).toInstant(ZoneOffset.UTC);
+  private static final List<String> INDEX_ROOTS = List.of("header", "headers");
 
   public List<JsonlEntryFieldIndex> extract(String filePath, long entryId, JsonNode parsed) {
-    if (parsed == null || parsed.isNull()) {
+    if (parsed == null || parsed.isNull() || !parsed.isObject()) {
       return List.of();
     }
 
     List<JsonlEntryFieldIndex> rows = new ArrayList<>();
-    walk(parsed, filePath, entryId, "", rows);
+    for (String rootKey : INDEX_ROOTS) {
+      JsonNode rootNode = parsed.get(rootKey);
+      if (rootNode != null && rootNode.isObject()) {
+        walkRootObject(rootNode, rootKey, filePath, entryId, rows);
+      }
+    }
     return rows;
   }
 
-  private void walk(
-      JsonNode node,
+  private void walkRootObject(
+      JsonNode objectNode,
+      String parentPath,
       String filePath,
       long entryId,
-      String parentPath,
       List<JsonlEntryFieldIndex> rows
   ) {
-    if (node == null || node.isNull()) {
-      return;
-    }
+    Iterator<Map.Entry<String, JsonNode>> fields = objectNode.fields();
+    while (fields.hasNext()) {
+      Map.Entry<String, JsonNode> field = fields.next();
+      JsonNode value = field.getValue();
+      String fieldPath = parentPath + "." + field.getKey();
 
-    if (node.isObject()) {
-      Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-      while (fields.hasNext()) {
-        Map.Entry<String, JsonNode> field = fields.next();
-        JsonNode value = field.getValue();
-        String fieldPath = parentPath.isEmpty() ? field.getKey() : parentPath + "." + field.getKey();
-
-        rows.add(new JsonlEntryFieldIndex(
-            entryId,
-            filePath,
-            field.getKey(),
-            fieldPath,
-            toValueText(value),
-            toValueTs(field.getKey(), value),
-            valueType(value),
-            value != null && value.isNull(),
-            isEmptyValue(value)
-        ));
-
-        walk(value, filePath, entryId, fieldPath, rows);
+      if (value != null && value.isObject()) {
+        walkRootObject(value, fieldPath, filePath, entryId, rows);
+        continue;
       }
-      return;
-    }
-
-    if (node.isArray()) {
-      for (JsonNode child : node) {
-        walk(child, filePath, entryId, parentPath, rows);
+      if (value != null && value.isArray()) {
+        continue;
       }
+      if (value == null) {
+        continue;
+      }
+
+      rows.add(new JsonlEntryFieldIndex(
+          entryId,
+          filePath,
+          field.getKey(),
+          fieldPath,
+          toValueText(value),
+          valueType(value),
+          value.isNull(),
+          isEmptyValue(value)
+      ));
     }
   }
 
@@ -76,10 +68,7 @@ public class JsonFieldIndexExtractor {
     if (value == null || value.isNull()) {
       return null;
     }
-    if (value.isTextual()) {
-      return value.asText();
-    }
-    if (value.isNumber() || value.isBoolean()) {
+    if (value.isTextual() || value.isNumber() || value.isBoolean()) {
       return value.asText();
     }
     return null;
@@ -101,12 +90,6 @@ public class JsonFieldIndexExtractor {
     if (value.isNumber()) {
       return "number";
     }
-    if (value.isArray()) {
-      return "array";
-    }
-    if (value.isObject()) {
-      return "object";
-    }
     return "unknown";
   }
 
@@ -117,45 +100,6 @@ public class JsonFieldIndexExtractor {
     if (value.isTextual()) {
       return value.asText().isEmpty();
     }
-    if (value.isArray() || value.isObject()) {
-      return value.isEmpty();
-    }
     return false;
-  }
-
-  private Instant toValueTs(String fieldKey, JsonNode value) {
-    if (!isTimestampLikeField(fieldKey)) {
-      return null;
-    }
-    Instant parsed;
-    try {
-      parsed = TimestampParser.parseJsonScalar(value);
-    } catch (RuntimeException ignored) {
-      return null;
-    }
-    if (parsed == null) {
-      return null;
-    }
-    if (parsed.isBefore(POSTGRES_TIMESTAMPTZ_MIN) || parsed.isAfter(POSTGRES_TIMESTAMPTZ_MAX)) {
-      return null;
-    }
-    return parsed;
-  }
-
-  private boolean isTimestampLikeField(String fieldKey) {
-    if (fieldKey == null || fieldKey.isBlank()) {
-      return false;
-    }
-    String normalized = fieldKey.trim().toLowerCase(Locale.ROOT);
-    if (normalized.equals("timestamp")
-        || normalized.equals("time")
-        || normalized.equals("ts")
-        || normalized.equals("date")) {
-      return true;
-    }
-    if (normalized.endsWith("time")) {
-      return true;
-    }
-    return fieldKey.trim().endsWith("At") || normalized.endsWith("_at");
   }
 }

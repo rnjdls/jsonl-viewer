@@ -42,9 +42,8 @@ export const LEVEL_STYLES = {
 };
 
 export const FILTER_TYPE = {
-  FIELD:     "field",
-  TEXT:      "text",
-  TIMESTAMP: "timestamp",
+  FIELD: "field",
+  TEXT: "text",
 };
 
 export const FILTERS_OP = {
@@ -66,8 +65,4 @@ export const FIELD_FILTER_OP_OPTIONS = [
   { value: FIELD_FILTER_OP.NOT_NULL, label: "NOT NULL" },
   { value: FIELD_FILTER_OP.EMPTY, label: "EMPTY" },
   { value: FIELD_FILTER_OP.NOT_EMPTY, label: "NOT EMPTY" },
-];
-
-export const COMMON_TIMESTAMP_FIELDS = [
-  "timestamp", "time", "created_at", "updated_at", "date", "datetime", "ts",
 ];

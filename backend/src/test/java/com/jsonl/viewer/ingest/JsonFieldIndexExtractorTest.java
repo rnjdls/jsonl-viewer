@@ -1,13 +1,13 @@
 package com.jsonl.viewer.ingest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -16,130 +16,95 @@ class JsonFieldIndexExtractorTest {
   private final JsonFieldIndexExtractor extractor = new JsonFieldIndexExtractor();
 
   @Test
-  void extractsNestedFieldsAndValueMetadata() throws Exception {
+  void extractsOnlyLeafScalarsUnderTopLevelHeaderAndHeaders() throws Exception {
     JsonNode parsed = objectMapper.readTree("""
         {
-          "status": 200,
-          "timestamp": "2026-04-06T13:23:58Z",
-          "headers": {
-            "eventTime": "2026-04-06 13:23:58",
-            "status": null,
+          "header": {
+            "traceId": "abc-123",
+            "nested": {
+              "status": 200,
+              "ok": true,
+              "note": "",
+              "missingValue": null,
+              "items": [],
+              "meta": {}
+            },
             "items": [],
-            "obj": {}
+            "meta": {}
           },
-          "array": [
-            {"status": "ok"},
-            {"flag": true, "ts": 1712560000}
-          ],
-          "emptyString": ""
+          "headers": {
+            "eventTime": "2026-04-06T13:23:58Z",
+            "meta": {
+              "code": 503,
+              "cached": false
+            },
+            "empty": ""
+          },
+          "status": "outside-root",
+          "body": {
+            "headers": {
+              "ignored": "value"
+            }
+          }
         }
         """);
 
     List<JsonlEntryFieldIndex> rows = extractor.extract("source-a", 42L, parsed);
 
-    assertEquals(12, rows.size());
+    assertEquals(9, rows.size());
     assertTrue(rows.stream().allMatch(row -> row.getEntryId() == 42L));
     assertTrue(rows.stream().allMatch(row -> "source-a".equals(row.getFilePath())));
 
-    long statusCount = rows.stream().filter(row -> "status".equals(row.getFieldKey())).count();
-    assertEquals(3, statusCount);
+    JsonlEntryFieldIndex traceId = findByPath(rows, "header.traceId");
+    assertEquals("traceId", traceId.getFieldKey());
+    assertEquals("abc-123", traceId.getValueText());
+    assertEquals("string", traceId.getValueType());
+    assertFalse(traceId.isNull());
+    assertFalse(traceId.isEmpty());
 
-    JsonlEntryFieldIndex numberStatus = rows.stream()
-        .filter(row -> "status".equals(row.getFieldKey()) && "status".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals("200", numberStatus.getValueText());
-    assertTrue(!numberStatus.isNull());
-    assertTrue(!numberStatus.isEmpty());
-    assertNull(numberStatus.getValueTs());
+    JsonlEntryFieldIndex nestedStatus = findByPath(rows, "header.nested.status");
+    assertEquals("status", nestedStatus.getFieldKey());
+    assertEquals("200", nestedStatus.getValueText());
+    assertEquals("number", nestedStatus.getValueType());
 
-    JsonlEntryFieldIndex nullStatus = rows.stream()
-        .filter(row -> "headers.status".equals(row.getFieldPath()) && row.isNull())
-        .findFirst()
-        .orElseThrow();
-    assertEquals("null", nullStatus.getValueType());
+    JsonlEntryFieldIndex nestedNull = findByPath(rows, "header.nested.missingValue");
+    assertNull(nestedNull.getValueText());
+    assertEquals("null", nestedNull.getValueType());
+    assertTrue(nestedNull.isNull());
+    assertFalse(nestedNull.isEmpty());
 
-    JsonlEntryFieldIndex objectContainer = rows.stream()
-        .filter(row -> "headers.obj".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals("object", objectContainer.getValueType());
-    assertNull(objectContainer.getValueText());
-    assertTrue(objectContainer.isEmpty());
+    JsonlEntryFieldIndex nestedEmpty = findByPath(rows, "header.nested.note");
+    assertEquals("", nestedEmpty.getValueText());
+    assertEquals("string", nestedEmpty.getValueType());
+    assertFalse(nestedEmpty.isNull());
+    assertTrue(nestedEmpty.isEmpty());
 
-    JsonlEntryFieldIndex arrayContainer = rows.stream()
-        .filter(row -> "array".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals("array", arrayContainer.getValueType());
-    assertNull(arrayContainer.getValueText());
-    assertTrue(!arrayContainer.isEmpty());
+    JsonlEntryFieldIndex eventTime = findByPath(rows, "headers.eventTime");
+    assertEquals("eventTime", eventTime.getFieldKey());
+    assertEquals("2026-04-06T13:23:58Z", eventTime.getValueText());
 
-    JsonlEntryFieldIndex emptyString = rows.stream()
-        .filter(row -> "emptyString".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals("string", emptyString.getValueType());
-    assertTrue(emptyString.isEmpty());
-
-    JsonlEntryFieldIndex emptyArray = rows.stream()
-        .filter(row -> "headers.items".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals("array", emptyArray.getValueType());
-    assertTrue(emptyArray.isEmpty());
-
-    JsonlEntryFieldIndex booleanFlag = rows.stream()
-        .filter(row -> "array.flag".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals("boolean", booleanFlag.getValueType());
-    assertEquals("true", booleanFlag.getValueText());
-    assertNull(booleanFlag.getValueTs());
-
-    JsonlEntryFieldIndex isoTimestamp = rows.stream()
-        .filter(row -> "timestamp".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), isoTimestamp.getValueTs());
-
-    JsonlEntryFieldIndex naiveTimestamp = rows.stream()
-        .filter(row -> "headers.eventTime".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), naiveTimestamp.getValueTs());
-
-    JsonlEntryFieldIndex epochTimestamp = rows.stream()
-        .filter(row -> "array.ts".equals(row.getFieldPath()))
-        .findFirst()
-        .orElseThrow();
-    assertEquals(Instant.ofEpochSecond(1712560000L), epochTimestamp.getValueTs());
+    assertTrue(rows.stream().noneMatch(row -> "header.items".equals(row.getFieldPath())));
+    assertTrue(rows.stream().noneMatch(row -> "header.meta".equals(row.getFieldPath())));
+    assertTrue(rows.stream().noneMatch(row -> "header.nested.items".equals(row.getFieldPath())));
+    assertTrue(rows.stream().noneMatch(row -> "header.nested.meta".equals(row.getFieldPath())));
+    assertTrue(rows.stream().noneMatch(row -> "status".equals(row.getFieldPath())));
+    assertTrue(rows.stream().noneMatch(row -> "body.headers.ignored".equals(row.getFieldPath())));
   }
 
   @Test
-  void ignoresOutOfRangeTimestampCandidates() throws Exception {
+  void ignoresMissingOrNonObjectHeaderRoots() throws Exception {
     JsonNode parsed = objectMapper.readTree("""
         {
-          "timestamp": "+500000-01-01T00:00:00Z",
-          "ts": 9223372036854775807,
-          "createdAt": "-500000-01-01T00:00:00Z",
-          "eventTime": "2026-04-06T13:23:58Z"
+          "header": "not-an-object",
+          "headers": [],
+          "other": {
+            "status": 200
+          }
         }
         """);
 
-    List<JsonlEntryFieldIndex> rows = extractor.extract("source-a", 100L, parsed);
-
-    JsonlEntryFieldIndex rootTimestamp = findByPath(rows, "timestamp");
-    assertNull(rootTimestamp.getValueTs());
-
-    JsonlEntryFieldIndex ts = findByPath(rows, "ts");
-    assertNull(ts.getValueTs());
-
-    JsonlEntryFieldIndex createdAt = findByPath(rows, "createdAt");
-    assertNull(createdAt.getValueTs());
-
-    JsonlEntryFieldIndex eventTime = findByPath(rows, "eventTime");
-    assertEquals(Instant.parse("2026-04-06T13:23:58Z"), eventTime.getValueTs());
+    assertTrue(extractor.extract("source-a", 5L, parsed).isEmpty());
+    assertTrue(extractor.extract("source-a", 5L, null).isEmpty());
   }
 
   private JsonlEntryFieldIndex findByPath(List<JsonlEntryFieldIndex> rows, String fieldPath) {

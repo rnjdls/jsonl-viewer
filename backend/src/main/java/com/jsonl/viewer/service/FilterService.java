@@ -4,7 +4,6 @@ import com.jsonl.viewer.api.dto.FilterCountRequest;
 import com.jsonl.viewer.api.dto.FilterSpec;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.repo.JsonlEntryRepositoryCustom.FilterSql;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -12,7 +11,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class FilterService {
-  public static final String DEFAULT_TIMESTAMP_FIELD_PATH = "timestamp";
   public static final String FILTERS_OP_AND = "and";
   public static final String FILTERS_OP_OR = "or";
   private static final String FIELD_OP_CONTAINS = "contains";
@@ -22,13 +20,11 @@ public class FilterService {
   private static final String FIELD_OP_NOT_EMPTY = "not_empty";
 
   public List<FilterCriteria> normalize(FilterCountRequest request) {
-    return normalizeInternal(request.getFilters(), request.getFieldPath(), request.getValueContains(),
-        request.getTimestampFrom(), request.getTimestampTo());
+    return normalizeInternal(request.getFilters(), request.getFieldPath(), request.getValueContains());
   }
 
   public List<FilterCriteria> normalize(PreviewRequest request) {
-    return normalizeInternal(request.getFilters(), request.getFieldPath(), request.getValueContains(),
-        request.getTimestampFrom(), request.getTimestampTo());
+    return normalizeInternal(request.getFilters(), request.getFieldPath(), request.getValueContains());
   }
 
   public FilterSql buildFilterSql(List<FilterCriteria> filters) {
@@ -86,30 +82,6 @@ public class FilterService {
         );
         params.add(query);
         nextParamIndex++;
-      } else if (filter.type().equalsIgnoreCase("timestamp")) {
-        if (filter.from() == null && filter.to() == null) {
-          continue;
-        }
-
-        String tsFieldPath = normalizeTimestampFieldPath(filter.fieldPath());
-        StringBuilder query = new StringBuilder(
-            "SELECT DISTINCT entry_id AS id FROM jsonl_entry_field_index " +
-                "WHERE file_path = ?1 AND field_path = ?" + nextParamIndex
-        );
-        params.add(tsFieldPath);
-        nextParamIndex++;
-
-        if (filter.from() != null) {
-          query.append(" AND value_ts >= ?").append(nextParamIndex);
-          params.add(filter.from());
-          nextParamIndex++;
-        }
-        if (filter.to() != null) {
-          query.append(" AND value_ts <= ?").append(nextParamIndex);
-          params.add(filter.to());
-          nextParamIndex++;
-        }
-        candidateIdQueries.add(query.toString());
       }
     }
 
@@ -130,9 +102,7 @@ public class FilterService {
   private List<FilterCriteria> normalizeInternal(
       List<FilterSpec> filters,
       String fieldPath,
-      String valueContains,
-      String timestampFrom,
-      String timestampTo
+      String valueContains
   ) {
     List<FilterCriteria> result = new ArrayList<>();
 
@@ -147,21 +117,12 @@ public class FilterService {
               spec.getFieldPath(),
               normalizeFieldOp(spec.getOp()),
               spec.getValueContains(),
-              null,
-              null,
               null
           ));
         } else if (type.equalsIgnoreCase("text")) {
           String query = safeTrim(spec.getQuery());
           if (!query.isEmpty()) {
-            result.add(new FilterCriteria(type, null, null, null, query, null, null));
-          }
-        } else if (type.equalsIgnoreCase("timestamp")) {
-          Instant from = TimestampParser.parse(spec.getFrom());
-          Instant to = TimestampParser.parse(spec.getTo());
-          String tsFieldPath = safeTrim(spec.getFieldPath());
-          if (from != null || to != null || !tsFieldPath.isEmpty()) {
-            result.add(new FilterCriteria(type, tsFieldPath, null, null, null, from, to));
+            result.add(new FilterCriteria(type, null, null, null, query));
           }
         }
       }
@@ -170,21 +131,10 @@ public class FilterService {
 
     String trimmedField = safeTrim(fieldPath);
     if (!trimmedField.isEmpty()) {
-      result.add(new FilterCriteria("field", trimmedField, FIELD_OP_CONTAINS, valueContains, null, null, null));
-    }
-
-    Instant from = TimestampParser.parse(timestampFrom);
-    Instant to = TimestampParser.parse(timestampTo);
-    if (from != null || to != null) {
-      result.add(new FilterCriteria("timestamp", DEFAULT_TIMESTAMP_FIELD_PATH, null, null, null, from, to));
+      result.add(new FilterCriteria("field", trimmedField, FIELD_OP_CONTAINS, valueContains, null));
     }
 
     return result;
-  }
-
-  public String normalizeTimestampFieldPath(String rawFieldPath) {
-    String trimmed = safeTrim(rawFieldPath);
-    return trimmed.isEmpty() ? DEFAULT_TIMESTAMP_FIELD_PATH : trimmed;
   }
 
   private String normalizeFieldOp(String rawOp) {
