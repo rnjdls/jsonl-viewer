@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useJsonlSearch } from "./hooks/useJsonlSearch";
 
 import { TopBar } from "./components/TopBar/TopBar";
@@ -89,6 +89,189 @@ function toFilterPayload(filters, filtersOp) {
   };
 }
 
+function isSameStats(prevStats, nextStats) {
+  if (prevStats === nextStats) return true;
+  if (!prevStats || !nextStats) return false;
+  return prevStats.filePath === nextStats.filePath
+    && prevStats.totalCount === nextStats.totalCount
+    && prevStats.parsedCount === nextStats.parsedCount
+    && prevStats.errorCount === nextStats.errorCount
+    && prevStats.lastIngestedAt === nextStats.lastIngestedAt
+    && prevStats.sourceRevision === nextStats.sourceRevision
+    && prevStats.searchStatus === nextStats.searchStatus
+    && prevStats.ingestPaused === nextStats.ingestPaused
+    && prevStats.ingestedBytes === nextStats.ingestedBytes
+    && prevStats.targetBytes === nextStats.targetBytes
+    && prevStats.exactCountAvailable === nextStats.exactCountAvailable;
+}
+
+function isSameCounts(prevCounts, nextCounts) {
+  if (prevCounts === nextCounts) return true;
+  if (!prevCounts || !nextCounts) return false;
+  return prevCounts.totalCount === nextCounts.totalCount
+    && prevCounts.matchCount === nextCounts.matchCount
+    && prevCounts.status === nextCounts.status
+    && prevCounts.requestHash === nextCounts.requestHash
+    && prevCounts.sourceRevision === nextCounts.sourceRevision
+    && prevCounts.computedRevision === nextCounts.computedRevision
+    && prevCounts.lastComputedAt === nextCounts.lastComputedAt;
+}
+
+const PreviewSection = memo(function PreviewSection({
+  previewLimit,
+  previewSortDir,
+  previewActive,
+  previewRows,
+  previewLoading,
+  uiLocked,
+  exactMatchReady,
+  showPageTotal,
+  totalPages,
+  selectedPage,
+  canGoPrev,
+  canGoNext,
+  matchCount,
+  entryCopyStatusById,
+  expandedById,
+  entryDetailsById,
+  entryRawById,
+  entryDetailsLoadingById,
+  entryRawLoadingById,
+  jsonTreeExpandTokenById,
+  onPreviewLimitChange,
+  onSortDirChange,
+  onLoadPreview,
+  onPrevPage,
+  onNextPage,
+  onLoadBody,
+  onLoadRaw,
+  onCollapse,
+  onExpandAll,
+  onCopy,
+}) {
+  return (
+    <section className="preview">
+      <div className="preview-header">
+        <div>
+          <h2>Preview</h2>
+          <p>
+            Showing up to <strong>{previewLimit}</strong> lines per page.
+          </p>
+        </div>
+        <div className="preview-sort">
+          <label className="preview-sort-label">
+            Lines/page
+            <select
+              className="preview-select"
+              value={previewLimit}
+              onChange={onPreviewLimitChange}
+              disabled={uiLocked || previewLoading}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+            </select>
+          </label>
+          <label className="preview-sort-label">
+            Direction
+            <select
+              className="preview-select"
+              value={previewSortDir}
+              onChange={onSortDirChange}
+              disabled={uiLocked || previewLoading}
+            >
+              <option value="asc">Asc</option>
+              <option value="desc">Desc</option>
+            </select>
+          </label>
+        </div>
+        <div className="preview-actions">
+          <button
+            className="preview-btn"
+            onClick={onLoadPreview}
+            disabled={uiLocked || previewLoading || (exactMatchReady && matchCount === 0)}
+          >
+            {previewActive ? "Reload Preview" : "Load Preview"}
+          </button>
+          {previewActive && (
+            <span className="preview-sort-label preview-page-label">
+              Page <strong>{selectedPage}</strong>
+              {showPageTotal && <span className="preview-page-total">of {totalPages}</span>}
+            </span>
+          )}
+          {previewActive && (
+            <button
+              className="preview-btn preview-btn--secondary"
+              onClick={onPrevPage}
+              disabled={uiLocked || previewLoading || !canGoPrev}
+            >
+              Prev
+            </button>
+          )}
+          {previewActive && (
+            <button
+              className="preview-btn preview-btn--secondary"
+              onClick={onNextPage}
+              disabled={uiLocked || previewLoading || !canGoNext}
+            >
+              Next
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!previewActive && !previewLoading && (
+        <div className="preview-empty">
+          Preview loads automatically when data is available. Use "Load Preview"
+          to reload page 1 at any time.
+        </div>
+      )}
+
+      {previewActive && !exactMatchReady && (
+        <div className="preview-empty">
+          Exact count is still pending. Preview pagination remains available with Prev/Next.
+        </div>
+      )}
+
+      {previewActive && previewRows.length === 0 && !previewLoading && (
+        <div className="preview-empty">No preview rows available.</div>
+      )}
+
+      {previewRows.map((row) => {
+        const copyStatus = entryCopyStatusById[row.id] ?? "idle";
+        return (
+          <JsonCard
+            key={row.id}
+            row={row}
+            rowId={row.id}
+            expanded={Boolean(expandedById[row.id])}
+            body={entryDetailsById[row.id]}
+            fullRaw={entryRawById[row.id]}
+            loadingBody={Boolean(entryDetailsLoadingById[row.id])}
+            loadingRaw={Boolean(entryRawLoadingById[row.id])}
+            onLoadBody={onLoadBody}
+            onLoadRaw={onLoadRaw}
+            onCollapse={onCollapse}
+            onExpandAll={onExpandAll}
+            onCopy={onCopy}
+            copyLabel={getCopyLabel(copyStatus)}
+            copyDisabled={uiLocked || copyStatus === "copying"}
+            globalDisabled={uiLocked}
+            expandAllToken={jsonTreeExpandTokenById[row.id] ?? 0}
+          />
+        );
+      })}
+
+      {previewLoading && (
+        <div className="preview-loading">Loading preview...</div>
+      )}
+    </section>
+  );
+});
+
 export default function App() {
   const [stats, setStats] = useState(null);
   const [statsError, setStatsError] = useState("");
@@ -128,6 +311,9 @@ export default function App() {
   const copyResetTimersRef = useRef({});
   const copyInFlightByIdRef = useRef({});
   const autoPreviewRunKeyRef = useRef("");
+  const latestStatsRef = useRef(null);
+  const exactCountAvailableRef = useRef(true);
+  const previousExactCountAvailableRef = useRef(true);
 
   const clearAllCopyResetTimers = useCallback(() => {
     Object.values(copyResetTimersRef.current).forEach((timerId) => {
@@ -221,11 +407,22 @@ export default function App() {
     [appliedFilters, filtersOp]
   );
 
+  const exactCountAvailable = stats?.exactCountAvailable ?? true;
+
+  const isCurrentCountRevision = useCallback((countResponse) => {
+    const responseRevision = countResponse?.sourceRevision;
+    const latestStatsRevision = latestStatsRef.current?.sourceRevision;
+    if (typeof responseRevision !== "number" || typeof latestStatsRevision !== "number") {
+      return true;
+    }
+    return responseRevision === latestStatsRevision;
+  }, []);
+
   const refreshStats = useCallback(async () => {
     try {
       const data = await getStats();
-      setStats(data);
-      setStatsError("");
+      setStats((prev) => (isSameStats(prev, data) ? prev : data));
+      setStatsError((prev) => (prev ? "" : prev));
     } catch (err) {
       setStatsError(err.message || "Failed to reach backend.");
     }
@@ -243,18 +440,29 @@ export default function App() {
           computedRevision: 0,
           lastComputedAt: null,
         };
-        setCounts(emptyCounts);
-        setPendingCountRequestHash(null);
+        setCounts((prev) => (isSameCounts(prev, emptyCounts) ? prev : emptyCounts));
+        setPendingCountRequestHash((prev) => (prev === null ? prev : null));
         return emptyCounts;
       }
+
+      if (!exactCountAvailableRef.current) {
+        setPendingCountRequestHash((prev) => (prev === null ? prev : null));
+        setCountsLoading((prev) => (prev ? false : prev));
+        return null;
+      }
+
       setCountsLoading(true);
       try {
         const data = await getCounts(payload || { filtersOp, filters: [] });
-        setCounts(data);
+        if (!isCurrentCountRevision(data)) {
+          return null;
+        }
+
+        setCounts((prev) => (isSameCounts(prev, data) ? prev : data));
         if (data?.status === "pending" && data?.requestHash) {
-          setPendingCountRequestHash(data.requestHash);
+          setPendingCountRequestHash((prev) => (prev === data.requestHash ? prev : data.requestHash));
         } else {
-          setPendingCountRequestHash(null);
+          setPendingCountRequestHash((prev) => (prev === null ? prev : null));
         }
         setError("");
         return data;
@@ -265,7 +473,7 @@ export default function App() {
         setCountsLoading(false);
       }
     },
-    [filtersOp, stats?.filePath]
+    [filtersOp, isCurrentCountRevision, stats?.filePath]
   );
 
   useEffect(() => {
@@ -275,16 +483,45 @@ export default function App() {
   }, [refreshStats]);
 
   useEffect(() => {
+    latestStatsRef.current = stats;
+    exactCountAvailableRef.current = stats?.exactCountAvailable ?? true;
+  }, [stats]);
+
+  useEffect(() => {
     if (!stats?.filePath) {
       setCounts(null);
       setPendingCountRequestHash(null);
       return;
     }
+
+    if (!(stats?.exactCountAvailable ?? true)) {
+      setPendingCountRequestHash((prev) => (prev === null ? prev : null));
+      setCountsLoading((prev) => (prev ? false : prev));
+      return;
+    }
+
     refreshCounts(filterPayload);
-  }, [stats?.filePath, refreshCounts]);
+  }, [refreshCounts, stats?.filePath]);
 
   useEffect(() => {
-    if (!pendingCountRequestHash || !stats?.filePath) {
+    const previouslyAvailable = previousExactCountAvailableRef.current;
+    previousExactCountAvailableRef.current = exactCountAvailable;
+
+    if (!stats?.filePath) {
+      return;
+    }
+    if (!exactCountAvailable) {
+      setPendingCountRequestHash((prev) => (prev === null ? prev : null));
+      setCountsLoading((prev) => (prev ? false : prev));
+      return;
+    }
+    if (!previouslyAvailable && exactCountAvailable) {
+      refreshCounts(filterPayload);
+    }
+  }, [exactCountAvailable, filterPayload, refreshCounts, stats?.filePath]);
+
+  useEffect(() => {
+    if (!pendingCountRequestHash || !stats?.filePath || !exactCountAvailable) {
       return;
     }
 
@@ -293,9 +530,13 @@ export default function App() {
       try {
         const data = await getCountStatus(pendingCountRequestHash);
         if (cancelled) return;
-        setCounts(data);
+        if (!isCurrentCountRevision(data)) {
+          setPendingCountRequestHash((prev) => (prev === null ? prev : null));
+          return;
+        }
+        setCounts((prev) => (isSameCounts(prev, data) ? prev : data));
         if (data?.status === "ready") {
-          setPendingCountRequestHash(null);
+          setPendingCountRequestHash((prev) => (prev === null ? prev : null));
         }
       } catch (err) {
         if (cancelled) return;
@@ -309,14 +550,20 @@ export default function App() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [pendingCountRequestHash, stats?.filePath]);
+  }, [exactCountAvailable, isCurrentCountRevision, pendingCountRequestHash, stats?.filePath]);
 
   useEffect(() => {
-    if (!pendingCountRequestHash || !stats?.filePath) {
+    if (!pendingCountRequestHash || !stats?.filePath || !exactCountAvailable) {
       return;
     }
     refreshCounts(filterPayload);
-  }, [filterPayload, pendingCountRequestHash, refreshCounts, stats?.filePath, stats?.sourceRevision]);
+  }, [
+    exactCountAvailable,
+    filterPayload,
+    refreshCounts,
+    stats?.filePath,
+    stats?.sourceRevision,
+  ]);
 
   const requestPreviewPage = useCallback(
     async (cursor, filterPayloadOverride) =>
@@ -330,7 +577,7 @@ export default function App() {
   );
 
   const fetchPreviewPage = useCallback(
-    async (cursor, targetPageIndex, historySeed, filterPayloadOverride) => {
+    async (cursor, targetPageIndex, filterPayloadOverride) => {
       if (!stats?.filePath) return;
       setPreviewLoading(true);
       try {
@@ -342,8 +589,7 @@ export default function App() {
         setPageIndex(targetPageIndex);
         setNextCursor(receivedNextCursor);
         setCursorHistory((prev) => {
-          const baseHistory = historySeed ?? prev;
-          const nextHistory = [...baseHistory];
+          const nextHistory = [...prev];
           nextHistory[targetPageIndex] = cursor ?? null;
           if (receivedNextCursor) {
             nextHistory[targetPageIndex + 1] = receivedNextCursor;
@@ -366,21 +612,27 @@ export default function App() {
     if (uiLocked) return;
     applyFilters();
     resetPreviewState();
-    const nextCounts = await refreshCounts(activeFilterPayload);
-    if (!nextCounts) return;
-    const totalAfterSearch = nextCounts?.totalCount ?? stats?.totalCount ?? 0;
-    const exactMatchReadyAfterSearch =
-      nextCounts?.status === "ready"
-      && nextCounts?.computedRevision === nextCounts?.sourceRevision;
-    const matchAfterSearch = nextCounts?.matchCount ?? 0;
+    if (!stats?.filePath || (stats?.totalCount ?? 0) <= 0) return;
 
-    if (!stats?.filePath || totalAfterSearch <= 0) return;
+    if (!exactCountAvailable && activeFilterPayload.filters.length > 0) {
+      setPendingCountRequestHash((prev) => (prev === null ? prev : null));
+      setCountsLoading((prev) => (prev ? false : prev));
+      await fetchPreviewPage(null, 0, activeFilterPayload);
+      return;
+    }
+
+    const nextCounts = await refreshCounts(activeFilterPayload);
+    const exactMatchReadyAfterSearch = nextCounts
+      && nextCounts.status === "ready"
+      && nextCounts.computedRevision === nextCounts.sourceRevision;
+    const matchAfterSearch = nextCounts?.matchCount ?? 0;
     if (exactMatchReadyAfterSearch && matchAfterSearch === 0) return;
 
-    await fetchPreviewPage(null, 0, undefined, activeFilterPayload);
+    await fetchPreviewPage(null, 0, activeFilterPayload);
   }, [
     activeFilterPayload,
     applyFilters,
+    exactCountAvailable,
     fetchPreviewPage,
     refreshCounts,
     resetPreviewState,
@@ -394,15 +646,13 @@ export default function App() {
       return;
     }
 
-    const sourceRevision = counts?.sourceRevision ?? stats?.sourceRevision ?? 0;
+    const sourceRevision = stats?.sourceRevision ?? 0;
     const autoPreviewKey = `${stats.filePath}::${sourceRevision}`;
     if (autoPreviewRunKeyRef.current === autoPreviewKey) {
       return;
     }
 
-    const totalFromCounts = counts?.totalCount;
-    const totalForAutoPreview =
-      (typeof totalFromCounts === "number" ? totalFromCounts : stats?.totalCount) ?? 0;
+    const totalForAutoPreview = stats?.totalCount ?? 0;
     if (totalForAutoPreview <= 0) {
       return;
     }
@@ -410,8 +660,6 @@ export default function App() {
     autoPreviewRunKeyRef.current = autoPreviewKey;
     fetchPreviewPage(null, 0);
   }, [
-    counts?.sourceRevision,
-    counts?.totalCount,
     fetchPreviewPage,
     previewActive,
     previewLimit,
@@ -438,39 +686,6 @@ export default function App() {
     const prevCursor = cursorHistory[pageIndex - 1] ?? null;
     await fetchPreviewPage(prevCursor, pageIndex - 1);
   }, [cursorHistory, fetchPreviewPage, pageIndex, previewActive, uiLocked]);
-
-  const handlePageSelectChange = useCallback(
-    async (event) => {
-      if (uiLocked || !previewActive) return;
-      const requestedPage = Number.parseInt(event.target.value, 10);
-      if (Number.isNaN(requestedPage) || requestedPage < 1) return;
-
-      const targetPageIndex = requestedPage - 1;
-      if (targetPageIndex === pageIndex) return;
-
-      let workingHistory = [...cursorHistory];
-      let targetCursor = workingHistory[targetPageIndex];
-
-      if (targetCursor === undefined) {
-        let scanIndex = workingHistory.length - 1;
-        while (scanIndex < targetPageIndex) {
-          const scanCursor = workingHistory[scanIndex];
-          if (scanCursor === undefined) break;
-          const scanData = await requestPreviewPage(scanCursor);
-          const generatedNextCursor = scanData?.nextCursor ?? null;
-          if (!generatedNextCursor) break;
-          workingHistory[scanIndex + 1] = generatedNextCursor;
-          scanIndex += 1;
-        }
-        targetCursor = workingHistory[targetPageIndex];
-      }
-
-      if (targetCursor === undefined) return;
-
-      await fetchPreviewPage(targetCursor ?? null, targetPageIndex, workingHistory);
-    },
-    [cursorHistory, fetchPreviewPage, pageIndex, previewActive, requestPreviewPage, uiLocked]
-  );
 
   const handleSortDirChange = useCallback(
     (event) => {
@@ -653,26 +868,32 @@ export default function App() {
   const executingAdminActionMeta = adminActionExecuting
     ? ADMIN_ACTION_META[adminActionExecuting]
     : null;
-  const totalCount = counts?.totalCount ?? stats?.totalCount ?? 0;
+  const totalCount = stats?.totalCount ?? counts?.totalCount ?? 0;
+  const deferredCountsActive = Boolean(stats?.filePath) && !exactCountAvailable && hasAppliedFilters;
   const exactMatchReady =
-    counts?.status === "ready"
+    exactCountAvailable
+    && counts?.status === "ready"
     && counts?.computedRevision === counts?.sourceRevision;
-  const matchCount = exactMatchReady ? (counts?.matchCount ?? 0) : 0;
+  const matchCount = exactMatchReady
+    ? (counts?.matchCount ?? 0)
+    : (hasAppliedFilters ? 0 : totalCount);
+  const searchBarCountStatus = deferredCountsActive ? "deferred" : (counts?.status || "ready");
   const activeCount = activeFilters?.length ?? 0;
   const totalPages = exactMatchReady ? Math.max(1, Math.ceil(matchCount / previewLimit)) : null;
+  const showPageTotal = exactMatchReady && typeof totalPages === "number";
   const selectedPage = pageIndex + 1;
   const canGoPrev = previewActive && pageIndex > 0;
   const canGoNext = previewActive
     && Boolean(nextCursor)
-    && (!exactMatchReady || pageIndex + 1 < totalPages);
+    && (!showPageTotal || pageIndex + 1 < totalPages);
 
   const emptyVariant = statsError
     ? "backend-offline"
     : !stats?.filePath
       ? "no-file"
-      : counts && totalCount === 0
+      : totalCount === 0
         ? "empty-file"
-        : counts && exactMatchReady && matchCount === 0 && hasAppliedFilters
+        : exactMatchReady && matchCount === 0 && hasAppliedFilters
           ? "no-results"
           : null;
 
@@ -708,7 +929,7 @@ export default function App() {
         activeCount={activeCount}
         filtersOp={filtersOp}
         loading={countsLoading}
-        countStatus={counts?.status || "ready"}
+        countStatus={searchBarCountStatus}
         globalDisabled={uiLocked}
         onAddFieldFilter={addFieldFilter}
         onAddTextFilter={addTextFilter}
@@ -729,137 +950,38 @@ export default function App() {
         {emptyVariant ? (
           <EmptyState variant={emptyVariant} />
         ) : (
-          <section className="preview">
-            <div className="preview-header">
-              <div>
-                <h2>Preview</h2>
-                <p>
-                  Showing up to <strong>{previewLimit}</strong> lines per page.
-                </p>
-              </div>
-              <div className="preview-sort">
-                <label className="preview-sort-label">
-                  Lines/page
-                  <select
-                    className="preview-select"
-                    value={previewLimit}
-                    onChange={handlePreviewLimitChange}
-                    disabled={uiLocked || previewLoading}
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={200}>200</option>
-                    <option value={500}>500</option>
-                  </select>
-                </label>
-                <label className="preview-sort-label">
-                  Direction
-                  <select
-                    className="preview-select"
-                    value={previewSortDir}
-                    onChange={handleSortDirChange}
-                    disabled={uiLocked || previewLoading}
-                  >
-                    <option value="asc">Asc</option>
-                    <option value="desc">Desc</option>
-                  </select>
-                </label>
-              </div>
-              <div className="preview-actions">
-                <button
-                  className="preview-btn"
-                  onClick={handleLoadPreview}
-                  disabled={uiLocked || previewLoading || (exactMatchReady && matchCount === 0)}
-                >
-                  {previewActive ? "Reload Preview" : "Load Preview"}
-                </button>
-                {previewActive && exactMatchReady && (
-                  <label className="preview-sort-label">
-                    Page
-                    <select
-                      className="preview-select"
-                      value={selectedPage}
-                      onChange={handlePageSelectChange}
-                      disabled={uiLocked || previewLoading || totalPages <= 1}
-                    >
-                      {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNo) => (
-                        <option key={`page-${pageNo}`} value={pageNo}>
-                          {pageNo}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="preview-page-total">of {totalPages}</span>
-                  </label>
-                )}
-                {previewActive && (
-                  <button
-                    className="preview-btn preview-btn--secondary"
-                    onClick={handlePrevPage}
-                    disabled={uiLocked || previewLoading || !canGoPrev}
-                  >
-                    Prev
-                  </button>
-                )}
-                {previewActive && (
-                  <button
-                    className="preview-btn preview-btn--secondary"
-                    onClick={handleNextPage}
-                    disabled={uiLocked || previewLoading || !canGoNext}
-                  >
-                    Next
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {!previewActive && !previewLoading && (
-              <div className="preview-empty">
-                Preview loads automatically when data is available. Use "Load Preview"
-                to reload page 1 at any time.
-              </div>
-            )}
-
-            {previewActive && !exactMatchReady && (
-              <div className="preview-empty">
-                Exact count is still pending. Page selection will unlock when
-                the background count completes.
-              </div>
-            )}
-
-            {previewActive && previewRows.length === 0 && !previewLoading && (
-              <div className="preview-empty">No preview rows available.</div>
-            )}
-
-            {previewRows.map((row) => {
-              const copyStatus = entryCopyStatusById[row.id] ?? "idle";
-              return (
-                <JsonCard
-                  key={row.id}
-                  row={row}
-                  expanded={Boolean(expandedById[row.id])}
-                  body={entryDetailsById[row.id]}
-                  fullRaw={entryRawById[row.id]}
-                  loadingBody={Boolean(entryDetailsLoadingById[row.id])}
-                  loadingRaw={Boolean(entryRawLoadingById[row.id])}
-                  onLoadBody={() => handleLoadBody(row.id)}
-                  onLoadRaw={() => handleLoadFullRaw(row.id)}
-                  onCollapse={() => handleCollapseBody(row.id)}
-                  onExpandAll={() => handleExpandAllJsonTree(row.id)}
-                  onCopy={() => handleCopyRawLine(row.id)}
-                  copyLabel={getCopyLabel(copyStatus)}
-                  copyDisabled={uiLocked || copyStatus === "copying"}
-                  globalDisabled={uiLocked}
-                  expandAllToken={jsonTreeExpandTokenById[row.id] ?? 0}
-                />
-              );
-            })}
-
-            {previewLoading && (
-              <div className="preview-loading">Loading preview...</div>
-            )}
-          </section>
+          <PreviewSection
+            previewLimit={previewLimit}
+            previewSortDir={previewSortDir}
+            previewActive={previewActive}
+            previewRows={previewRows}
+            previewLoading={previewLoading}
+            uiLocked={uiLocked}
+            exactMatchReady={exactMatchReady}
+            showPageTotal={showPageTotal}
+            totalPages={totalPages}
+            selectedPage={selectedPage}
+            canGoPrev={canGoPrev}
+            canGoNext={canGoNext}
+            matchCount={matchCount}
+            entryCopyStatusById={entryCopyStatusById}
+            expandedById={expandedById}
+            entryDetailsById={entryDetailsById}
+            entryRawById={entryRawById}
+            entryDetailsLoadingById={entryDetailsLoadingById}
+            entryRawLoadingById={entryRawLoadingById}
+            jsonTreeExpandTokenById={jsonTreeExpandTokenById}
+            onPreviewLimitChange={handlePreviewLimitChange}
+            onSortDirChange={handleSortDirChange}
+            onLoadPreview={handleLoadPreview}
+            onPrevPage={handlePrevPage}
+            onNextPage={handleNextPage}
+            onLoadBody={handleLoadBody}
+            onLoadRaw={handleLoadFullRaw}
+            onCollapse={handleCollapseBody}
+            onExpandAll={handleExpandAllJsonTree}
+            onCopy={handleCopyRawLine}
+          />
         )}
       </main>
 

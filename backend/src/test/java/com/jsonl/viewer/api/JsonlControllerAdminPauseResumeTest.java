@@ -50,6 +50,7 @@ class JsonlControllerAdminPauseResumeTest {
     ControllerFixture fixture = newController(pauseState);
 
     assertEquals(true, fixture.controller().stats().ingestPaused());
+    assertEquals(true, fixture.controller().stats().exactCountAvailable());
     pauseState.resume();
     assertEquals(false, fixture.controller().stats().ingestPaused());
   }

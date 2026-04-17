@@ -1,7 +1,9 @@
 package com.jsonl.viewer.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -49,6 +51,39 @@ class JsonlControllerStatsProgressTest {
 
     assertEquals(8L, response.ingestedBytes());
     assertEquals(Files.size(sourceFile), response.targetBytes());
+    assertFalse(response.exactCountAvailable());
+  }
+
+  @Test
+  void statsReportsExactCountAvailableWhenBytesCatchUp() throws IOException {
+    Path sourceFile = tempDir.resolve("source-complete.jsonl");
+    Files.writeString(sourceFile, "{\"a\":1}\n{\"b\":2}\n", StandardCharsets.UTF_8);
+    long sourceSize = Files.size(sourceFile);
+
+    AppProperties properties = fileProperties(sourceFile.toString());
+    IngestState state = new IngestState(sourceFile.toString(), sourceSize, 3L, Instant.parse("2026-04-10T10:15:30.000Z"));
+    state.setTotalCount(2L);
+
+    JsonlController controller = controller(properties, Optional.of(state));
+    StatsResponse response = controller.stats();
+
+    assertTrue(response.exactCountAvailable());
+  }
+
+  @Test
+  void statsReportsExactCountAvailableWhenIngestionIsPaused() throws IOException {
+    Path sourceFile = tempDir.resolve("source-paused.jsonl");
+    Files.writeString(sourceFile, "{\"a\":1}\n{\"b\":2}\n", StandardCharsets.UTF_8);
+
+    AppProperties properties = fileProperties(sourceFile.toString());
+    IngestState state = new IngestState(sourceFile.toString(), 4L, 2L, Instant.parse("2026-04-10T10:15:30.000Z"));
+    IngestPauseState pauseState = new IngestPauseState();
+    pauseState.pause();
+
+    JsonlController controller = controller(properties, Optional.of(state), pauseState);
+    StatsResponse response = controller.stats();
+
+    assertTrue(response.exactCountAvailable());
   }
 
   @Test
@@ -62,6 +97,7 @@ class JsonlControllerStatsProgressTest {
 
     assertNull(response.ingestedBytes());
     assertNull(response.targetBytes());
+    assertTrue(response.exactCountAvailable());
   }
 
   @Test
@@ -76,6 +112,7 @@ class JsonlControllerStatsProgressTest {
 
     assertNull(response.ingestedBytes());
     assertNull(response.targetBytes());
+    assertTrue(response.exactCountAvailable());
   }
 
   private AppProperties fileProperties(String sourcePath) {
@@ -86,6 +123,14 @@ class JsonlControllerStatsProgressTest {
   }
 
   private JsonlController controller(AppProperties properties, Optional<IngestState> state) {
+    return controller(properties, state, new IngestPauseState());
+  }
+
+  private JsonlController controller(
+      AppProperties properties,
+      Optional<IngestState> state,
+      IngestPauseState pauseState
+  ) {
     IngestSourceResolver sourceResolver = new IngestSourceResolver(properties);
     String sourceId = sourceResolver.getActiveSourceId();
     IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
@@ -103,7 +148,7 @@ class JsonlControllerStatsProgressTest {
         new FilterRequestHasher(),
         mock(FilterCountCacheService.class),
         new NoopIngestAdminService(),
-        new IngestPauseState(),
+        pauseState,
         new PreviewCursorCodec(new ObjectMapper())
     );
   }

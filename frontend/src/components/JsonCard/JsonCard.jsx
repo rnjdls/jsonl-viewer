@@ -1,8 +1,10 @@
+import { memo } from "react";
 import { JsonValue } from "../JsonValue/JsonValue";
 import "./JsonCard.css";
 
-export function JsonCard({
+function JsonCardComponent({
   row,
+  rowId,
   expanded,
   body,
   fullRaw,
@@ -43,7 +45,7 @@ export function JsonCard({
         <div className="card-actions">
           <button
             className="card-btn card-btn--secondary"
-            onClick={onCopy}
+            onClick={() => onCopy(rowId)}
             disabled={globalDisabled || copyDisabled}
             title="Copy raw line"
             aria-label="Copy raw JSON line to clipboard"
@@ -53,7 +55,7 @@ export function JsonCard({
           {expanded && hasParsedBody && (
             <button
               className="card-btn card-btn--secondary"
-              onClick={onExpandAll}
+              onClick={() => onExpandAll(rowId)}
               title="Expand all JSON fields"
               aria-label="Expand all JSON fields"
               disabled={globalDisabled}
@@ -62,11 +64,19 @@ export function JsonCard({
             </button>
           )}
           {expanded ? (
-            <button className="card-btn card-btn--secondary" onClick={onCollapse} disabled={globalDisabled}>
+            <button
+              className="card-btn card-btn--secondary"
+              onClick={() => onCollapse(rowId)}
+              disabled={globalDisabled}
+            >
               Collapse
             </button>
           ) : (
-            <button className="card-btn" onClick={onLoadBody} disabled={globalDisabled || loadingBody}>
+            <button
+              className="card-btn"
+              onClick={() => onLoadBody(rowId)}
+              disabled={globalDisabled || loadingBody}
+            >
               {loadingBody ? "Loading body..." : "Load body"}
             </button>
           )}
@@ -100,7 +110,7 @@ export function JsonCard({
             {row.rawTruncated && !fullRaw && (
               <button
                 className="card-btn card-btn--secondary"
-                onClick={onLoadRaw}
+                onClick={() => onLoadRaw(rowId)}
                 disabled={globalDisabled || loadingRaw}
               >
                 {loadingRaw ? "Loading full raw..." : "Load full raw"}
@@ -115,3 +125,24 @@ export function JsonCard({
     </article>
   );
 }
+
+function areJsonCardPropsEqual(prevProps, nextProps) {
+  return prevProps.row === nextProps.row
+    && prevProps.rowId === nextProps.rowId
+    && prevProps.expanded === nextProps.expanded
+    && prevProps.body === nextProps.body
+    && prevProps.fullRaw === nextProps.fullRaw
+    && prevProps.loadingBody === nextProps.loadingBody
+    && prevProps.loadingRaw === nextProps.loadingRaw
+    && prevProps.copyLabel === nextProps.copyLabel
+    && prevProps.copyDisabled === nextProps.copyDisabled
+    && prevProps.expandAllToken === nextProps.expandAllToken
+    && prevProps.globalDisabled === nextProps.globalDisabled
+    && prevProps.onLoadBody === nextProps.onLoadBody
+    && prevProps.onLoadRaw === nextProps.onLoadRaw
+    && prevProps.onCollapse === nextProps.onCollapse
+    && prevProps.onExpandAll === nextProps.onExpandAll
+    && prevProps.onCopy === nextProps.onCopy;
+}
+
+export const JsonCard = memo(JsonCardComponent, areJsonCardPropsEqual);
