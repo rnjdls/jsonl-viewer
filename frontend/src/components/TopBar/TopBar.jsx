@@ -17,6 +17,8 @@ const FALLBACK_TIME_ZONES = [
   "Asia/Tokyo",
   "Australia/Sydney",
 ];
+const MB_BYTES = 1_000_000;
+const GB_BYTES = 1_000_000_000;
 
 function getSelectableTimeZones() {
   if (typeof Intl.supportedValuesOf === "function") {
@@ -32,6 +34,29 @@ function getSelectableTimeZones() {
   return FALLBACK_TIME_ZONES;
 }
 
+function formatIngestBytes(bytes, unit) {
+  if (unit === "GB") {
+    return `${(bytes / GB_BYTES).toFixed(2)} GB`;
+  }
+  return `${Math.round(bytes / MB_BYTES)} MB`;
+}
+
+function getIngestSizeDisplay(ingestedBytes, targetBytes) {
+  if (!Number.isFinite(ingestedBytes) || !Number.isFinite(targetBytes)) {
+    return null;
+  }
+  if (ingestedBytes < 0 || targetBytes < 0) {
+    return null;
+  }
+
+  const unit = targetBytes >= GB_BYTES ? "GB" : "MB";
+  return {
+    currentValue: formatIngestBytes(ingestedBytes, unit),
+    targetValue: formatIngestBytes(targetBytes, unit),
+    matches: ingestedBytes === targetBytes,
+  };
+}
+
 /**
  * Sticky application header.
  *
@@ -41,10 +66,11 @@ function getSelectableTimeZones() {
  *   filePath: string | null,
  *   lastIngestedAt: string | null,
  *   totalCount: number,
- *   parsedCount: number,
  *   errorCount: number,
  *   searchStatus: string,
  *   ingestPaused: boolean,
+ *   ingestedBytes: number | null,
+ *   targetBytes: number | null,
  *   onReload: () => void,
  *   onReset: () => void,
  *   onPauseToggle: () => void,
@@ -60,10 +86,11 @@ export function TopBar({
   filePath,
   lastIngestedAt,
   totalCount,
-  parsedCount,
   errorCount,
   searchStatus,
   ingestPaused,
+  ingestedBytes,
+  targetBytes,
   onReload,
   onReset,
   onPauseToggle,
@@ -92,6 +119,10 @@ export function TopBar({
   );
 
   const selectedTimeZone = coerceTimeZoneOrLocal(timeZone);
+  const ingestSizeDisplay = useMemo(
+    () => getIngestSizeDisplay(ingestedBytes, targetBytes),
+    [ingestedBytes, targetBytes]
+  );
 
   const timeZoneOptions = useMemo(() => {
     const normalized = [...new Set(getSelectableTimeZones())].sort((left, right) =>
@@ -194,9 +225,6 @@ export function TopBar({
           <strong>{totalCount}</strong> total
         </span>
         <span className="topbar-chip">
-          <strong>{parsedCount}</strong> parsed
-        </span>
-        <span className="topbar-chip">
           <strong>{errorCount}</strong> errors
         </span>
         <span className="topbar-chip">
@@ -255,6 +283,30 @@ export function TopBar({
             role="menu"
             aria-label="Admin actions"
           >
+            {ingestSizeDisplay && (
+              <div className="topbar-menu-status-row">
+                <span className="topbar-menu-status-label">ingested:</span>
+                <span
+                  className={`topbar-menu-status-value ${
+                    ingestSizeDisplay.matches
+                      ? "topbar-menu-status-value--success"
+                      : "topbar-menu-status-value--current"
+                  }`}
+                >
+                  {ingestSizeDisplay.currentValue}
+                </span>
+                <span className="topbar-menu-status-separator">/</span>
+                <span
+                  className={`topbar-menu-status-value ${
+                    ingestSizeDisplay.matches
+                      ? "topbar-menu-status-value--success"
+                      : "topbar-menu-status-value--target"
+                  }`}
+                >
+                  {ingestSizeDisplay.targetValue}
+                </span>
+              </div>
+            )}
             <button
               type="button"
               role="menuitem"

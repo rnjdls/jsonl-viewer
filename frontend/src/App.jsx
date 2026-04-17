@@ -682,10 +682,11 @@ export default function App() {
         filePath={stats?.filePath}
         lastIngestedAt={stats?.lastIngestedAt}
         totalCount={stats?.totalCount ?? 0}
-        parsedCount={stats?.parsedCount ?? 0}
         errorCount={stats?.errorCount ?? 0}
         searchStatus={stats?.searchStatus || "ready"}
         ingestPaused={Boolean(stats?.ingestPaused)}
+        ingestedBytes={stats?.ingestedBytes ?? null}
+        targetBytes={stats?.targetBytes ?? null}
         onReload={() => handleRequestAdminAction(ADMIN_ACTION.RELOAD)}
         onReset={() => handleRequestAdminAction(ADMIN_ACTION.RESET)}
         onPauseToggle={handlePauseToggle}

@@ -26,6 +26,8 @@ const BASE_STATS = {
   ingestPaused: false,
   lastIngestedAt: "2026-04-10T10:15:30.000Z",
   sourceRevision: 2,
+  ingestedBytes: null,
+  targetBytes: null,
 };
 
 const READY_COUNTS = {
@@ -206,6 +208,87 @@ describe("App admin confirmations and lock", () => {
     expect(screen.queryByText("Reloading source...")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "+ Field" })).toBeEnabled();
+  });
+
+  it("does not render the parsed chip in the topbar", async () => {
+    render(<App />);
+    await waitForInitialLoad();
+
+    expect(screen.queryByText(/parsed/i)).not.toBeInTheDocument();
+  });
+
+  it("shows ingest size row in MB mode with mismatch colors", async () => {
+    const user = userEvent.setup();
+    api.getStats.mockResolvedValue({
+      ...BASE_STATS,
+      ingestedBytes: 512_000_000,
+      targetBytes: 999_000_000,
+    });
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await openAdminMenu(user);
+
+    expect(screen.getByText("ingested:")).toBeInTheDocument();
+    const currentValue = screen.getByText("512 MB");
+    const targetValue = screen.getByText("999 MB");
+    expect(currentValue).toHaveClass("topbar-menu-status-value--current");
+    expect(targetValue).toHaveClass("topbar-menu-status-value--target");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+  });
+
+  it("shows ingest size row in GB mode with fixed two decimals", async () => {
+    const user = userEvent.setup();
+    api.getStats.mockResolvedValue({
+      ...BASE_STATS,
+      ingestedBytes: 1_250_000_000,
+      targetBytes: 2_000_000_000,
+    });
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await openAdminMenu(user);
+
+    expect(screen.getByText("1.25 GB")).toBeInTheDocument();
+    expect(screen.getByText("2.00 GB")).toBeInTheDocument();
+  });
+
+  it("switches both ingest size values to success color on exact byte match", async () => {
+    const user = userEvent.setup();
+    api.getStats.mockResolvedValue({
+      ...BASE_STATS,
+      ingestedBytes: 2_000_000_000,
+      targetBytes: 2_000_000_000,
+    });
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await openAdminMenu(user);
+
+    const values = screen.getAllByText("2.00 GB");
+    expect(values).toHaveLength(2);
+    values.forEach((valueNode) => {
+      expect(valueNode).toHaveClass("topbar-menu-status-value--success");
+    });
+  });
+
+  it("hides ingest size row when progress size fields are unavailable", async () => {
+    const user = userEvent.setup();
+    api.getStats.mockResolvedValue({
+      ...BASE_STATS,
+      ingestedBytes: null,
+      targetBytes: null,
+    });
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await openAdminMenu(user);
+
+    expect(screen.queryByText("ingested:")).not.toBeInTheDocument();
   });
 
   it("does not render sort-by control and omits sortBy from preview requests", async () => {
