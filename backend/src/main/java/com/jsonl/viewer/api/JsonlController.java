@@ -24,6 +24,9 @@ import com.jsonl.viewer.service.FilterCriteria;
 import com.jsonl.viewer.service.FilterRequestHasher;
 import com.jsonl.viewer.service.FilterService;
 import com.jsonl.viewer.service.PreviewCursorCodec;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -93,12 +96,15 @@ public class JsonlController {
           null,
           0,
           "ready",
-          ingestPauseState.isPaused()
+          ingestPauseState.isPaused(),
+          null,
+          null
       );
     }
 
     IngestState state = ingestStateRepository.findById(sourceId)
         .orElse(new IngestState(sourceId, 0, 0, null));
+    IngestSizeProgress ingestSizeProgress = resolveIngestSizeProgress(sourceId, state);
 
     return new StatsResponse(
         sourceId,
@@ -108,7 +114,9 @@ public class JsonlController {
         state.getLastIngestedAt(),
         state.getSourceRevision(),
         computeSearchStatus(state),
-        ingestPauseState.isPaused()
+        ingestPauseState.isPaused(),
+        ingestSizeProgress.ingestedBytes(),
+        ingestSizeProgress.targetBytes()
     );
   }
 
@@ -301,6 +309,28 @@ public class JsonlController {
     return "ready";
   }
 
+  private IngestSizeProgress resolveIngestSizeProgress(String sourceId, IngestState state) {
+    if (!sourceResolver.isFileMode()) {
+      return IngestSizeProgress.unavailable();
+    }
+    Long targetBytes = readFileSize(sourceId);
+    if (targetBytes == null) {
+      return IngestSizeProgress.unavailable();
+    }
+    return new IngestSizeProgress(state.getByteOffset(), targetBytes);
+  }
+
+  private Long readFileSize(String sourceId) {
+    if (sourceId == null || sourceId.isBlank()) {
+      return null;
+    }
+    try {
+      return Files.size(Path.of(sourceId));
+    } catch (IOException | RuntimeException ignored) {
+      return null;
+    }
+  }
+
   private PreviewCursor decodePreviewCursor(
       String rawCursor,
       String sortDir
@@ -340,5 +370,14 @@ public class JsonlController {
       return null;
     }
     return duration.toMillis();
+  }
+
+  private record IngestSizeProgress(
+      Long ingestedBytes,
+      Long targetBytes
+  ) {
+    private static IngestSizeProgress unavailable() {
+      return new IngestSizeProgress(null, null);
+    }
   }
 }
