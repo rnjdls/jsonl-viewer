@@ -209,6 +209,10 @@
   font-size: 11px;
 }
 
+.preview-page-label strong {
+  color: var(--text);
+}
+
 .preview-select {
   min-height: 28px;
   border-radius: var(--radius-sm);
