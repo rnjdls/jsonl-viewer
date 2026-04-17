@@ -608,6 +608,31 @@ export default function App() {
     [requestPreviewPage, stats?.filePath]
   );
 
+  const handleClearAll = useCallback(async () => {
+    if (uiLocked) return;
+
+    const emptyPayload = { filtersOp, filters: [] };
+    clearAllFilters();
+    resetPreviewState();
+
+    const nextCounts = await refreshCounts(emptyPayload);
+    if (!stats?.filePath) return;
+
+    const totalCountAfterClear = nextCounts?.totalCount ?? stats?.totalCount ?? 0;
+    if (totalCountAfterClear <= 0) return;
+
+    await fetchPreviewPage(null, 0, emptyPayload);
+  }, [
+    clearAllFilters,
+    fetchPreviewPage,
+    filtersOp,
+    refreshCounts,
+    resetPreviewState,
+    stats?.filePath,
+    stats?.totalCount,
+    uiLocked,
+  ]);
+
   const handleSearch = useCallback(async () => {
     if (uiLocked) return;
     applyFilters();
@@ -936,7 +961,7 @@ export default function App() {
         onUpdateFilter={updateFilter}
         onRemoveFilter={removeFilter}
         onFiltersOpChange={setFiltersOp}
-        onClearAll={clearAllFilters}
+        onClearAll={handleClearAll}
         onSearch={handleSearch}
       />
 
