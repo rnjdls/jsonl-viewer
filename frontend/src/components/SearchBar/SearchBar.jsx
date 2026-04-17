@@ -22,7 +22,7 @@ import "./SearchBar.css";
  *   activeCount:       number,
  *   filtersOp:         import("../../utils/search").FiltersOp,
  *   loading:           boolean,
- *   countStatus:       "pending" | "ready",
+ *   countStatus:       "deferred" | "pending" | "ready",
  *   globalDisabled:    boolean,
  *   onAddFieldFilter:  () => void,
  *   onAddTextFilter:   () => void,
@@ -117,6 +117,8 @@ export function SearchBar({
         <span className="sb-count">
           {loading ? (
             <span>Loading counts...</span>
+          ) : countStatus === "deferred" ? (
+            <span>Preview is available. Exact filtered count will resume when ingest catches up.</span>
           ) : countStatus === "pending" ? (
             <span>Calculating exact count...</span>
           ) : (

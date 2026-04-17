@@ -26,6 +26,7 @@ const BASE_STATS = {
   ingestPaused: false,
   lastIngestedAt: "2026-04-10T10:15:30.000Z",
   sourceRevision: 2,
+  exactCountAvailable: true,
   ingestedBytes: null,
   targetBytes: null,
 };
@@ -47,6 +48,36 @@ const EMPTY_COUNTS = {
   ...READY_COUNTS,
   totalCount: 0,
   matchCount: 0,
+};
+const PREVIEW_PAGE_1 = {
+  rows: [
+    {
+      id: 101,
+      lineNo: 101,
+      ts: null,
+      key: null,
+      headers: null,
+      error: null,
+      rawSnippet: "{\"line\":101}",
+      rawTruncated: false,
+    },
+  ],
+  nextCursor: "cursor-page-2",
+};
+const PREVIEW_PAGE_2 = {
+  rows: [
+    {
+      id: 202,
+      lineNo: 202,
+      ts: null,
+      key: null,
+      headers: null,
+      error: null,
+      rawSnippet: "{\"line\":202}",
+      rawTruncated: false,
+    },
+  ],
+  nextCursor: null,
 };
 
 function deferred() {
@@ -328,6 +359,40 @@ describe("App admin confirmations and lock", () => {
     );
   });
 
+  it("removes page dropdown and keeps sequential Prev/Next navigation", async () => {
+    const user = userEvent.setup();
+    api.getPreview
+      .mockResolvedValueOnce(PREVIEW_PAGE_1)
+      .mockResolvedValueOnce(PREVIEW_PAGE_2)
+      .mockResolvedValueOnce(PREVIEW_PAGE_1);
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await waitFor(() => {
+      expect(screen.getByText("LINE 101")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("combobox", { name: "Page" })).not.toBeInTheDocument();
+    expect(screen.getByText("of 2")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(screen.getByText("LINE 202")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Prev" }));
+    await waitFor(() => {
+      expect(screen.getByText("LINE 101")).toBeInTheDocument();
+    });
+
+    expect(api.getPreview).toHaveBeenNthCalledWith(1, expect.objectContaining({ cursor: null }));
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ cursor: "cursor-page-2" })
+    );
+    expect(api.getPreview).toHaveBeenNthCalledWith(3, expect.objectContaining({ cursor: null }));
+  });
+
   it("auto-loads preview after Search using the active filter payload", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -361,6 +426,150 @@ describe("App admin confirmations and lock", () => {
         limit: 10,
       })
     );
+  });
+
+  it("keeps filtered preview working and defers exact counts while ingest is behind", async () => {
+    const user = userEvent.setup();
+    api.getStats.mockResolvedValue({
+      ...BASE_STATS,
+      exactCountAvailable: false,
+      ingestedBytes: 100,
+      targetBytes: 500,
+    });
+    api.getPreview.mockResolvedValue(PREVIEW_PAGE_1);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(api.getStats).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+    expect(api.getCounts).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "level");
+    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getCounts).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Preview is available. Exact filtered count will resume when ingest catches up.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^of \d+/i)).not.toBeInTheDocument();
+  });
+
+  it("requests exact counts once availability flips back to true and moves deferred -> pending -> ready", async () => {
+    const user = userEvent.setup();
+    const pendingCounts = {
+      ...READY_COUNTS,
+      matchCount: null,
+      status: "pending",
+      requestHash: "req-after-catch-up",
+      computedRevision: 1,
+    };
+    const readyCounts = {
+      ...READY_COUNTS,
+      matchCount: 3,
+    };
+
+    api.getStats
+      .mockResolvedValueOnce({
+        ...BASE_STATS,
+        exactCountAvailable: false,
+        ingestedBytes: 120,
+        targetBytes: 500,
+      })
+      .mockResolvedValue({
+        ...BASE_STATS,
+        exactCountAvailable: true,
+        ingestedBytes: 500,
+        targetBytes: 500,
+      });
+    api.getCounts.mockResolvedValue(pendingCounts);
+    api.getCountStatus.mockResolvedValue(readyCounts);
+    api.getPreview.mockResolvedValue(PREVIEW_PAGE_1);
+
+    render(<App />);
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+    expect(api.getCounts).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "level");
+    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Preview is available. Exact filtered count will resume when ingest catches up.")
+      ).toBeInTheDocument();
+    });
+    expect(api.getCounts).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    await waitFor(() => {
+      expect(api.getCounts).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(api.getCountStatus).toHaveBeenCalledWith("req-after-catch-up");
+    });
+    await waitFor(() => {
+      expect(document.querySelector(".sb-count")).toHaveTextContent(/3\s*\/\s*12 lines/i);
+    });
+  });
+
+  it("shows only current page while exact count is pending", async () => {
+    const pendingCounts = {
+      ...READY_COUNTS,
+      status: "pending",
+      requestHash: "pending-req-2",
+      computedRevision: 1,
+    };
+
+    api.getCounts.mockResolvedValue(pendingCounts);
+    api.getCountStatus.mockImplementation(() => new Promise(() => {}));
+    api.getPreview.mockResolvedValue(PREVIEW_PAGE_1);
+
+    render(<App />);
+    await waitForInitialLoad();
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalled();
+    });
+    const pageLabel = document.querySelector(".preview-page-label");
+    expect(pageLabel).not.toBeNull();
+    expect(pageLabel).toHaveTextContent("Page 1");
+    expect(screen.queryByText("of 2")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Page" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prev" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Exact count is still pending. Preview pagination remains available with Prev/Next.")
+    ).toBeInTheDocument();
+  });
+
+  it("does not trigger extra preview loads when stats refresh returns the same payload", async () => {
+    const user = userEvent.setup();
+    api.getPreview.mockResolvedValue(PREVIEW_PAGE_1);
+
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => {
+      expect(api.getStats).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getPreview).toHaveBeenCalledTimes(1);
   });
 
   it("hides timestamp controls and sends only field/text filters", async () => {

@@ -96,6 +96,7 @@ public class JsonlController {
           null,
           0,
           "ready",
+          true,
           ingestPauseState.isPaused(),
           null,
           null
@@ -105,6 +106,7 @@ public class JsonlController {
     IngestState state = ingestStateRepository.findById(sourceId)
         .orElse(new IngestState(sourceId, 0, 0, null));
     IngestSizeProgress ingestSizeProgress = resolveIngestSizeProgress(sourceId, state);
+    boolean exactCountAvailable = computeExactCountAvailable(ingestSizeProgress);
 
     return new StatsResponse(
         sourceId,
@@ -114,6 +116,7 @@ public class JsonlController {
         state.getLastIngestedAt(),
         state.getSourceRevision(),
         computeSearchStatus(state),
+        exactCountAvailable,
         ingestPauseState.isPaused(),
         ingestSizeProgress.ingestedBytes(),
         ingestSizeProgress.targetBytes()
@@ -307,6 +310,18 @@ public class JsonlController {
       return "building";
     }
     return "ready";
+  }
+
+  private boolean computeExactCountAvailable(IngestSizeProgress ingestSizeProgress) {
+    if (ingestPauseState.isPaused()) {
+      return true;
+    }
+    Long ingestedBytes = ingestSizeProgress.ingestedBytes();
+    Long targetBytes = ingestSizeProgress.targetBytes();
+    if (ingestedBytes == null || targetBytes == null) {
+      return true;
+    }
+    return ingestedBytes >= targetBytes;
   }
 
   private IngestSizeProgress resolveIngestSizeProgress(String sourceId, IngestState state) {

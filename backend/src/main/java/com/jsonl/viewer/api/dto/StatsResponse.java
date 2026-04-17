@@ -10,6 +10,7 @@ public record StatsResponse(
     Instant lastIngestedAt,
     long sourceRevision,
     String searchStatus,
+    boolean exactCountAvailable,
     boolean ingestPaused,
     Long ingestedBytes,
     Long targetBytes
