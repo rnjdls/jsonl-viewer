@@ -14,6 +14,11 @@ Use this workflow whenever you are about to make repo changes, not when you are 
 - `chore/<slug>` for maintenance, tooling, or infrastructure work
 - `docs/<slug>` for documentation and repo-guidance-only changes
 
+### Plan files + branch naming
+
+- If you are creating a plan markdown file under `docs/plans/` for a **feature** or **fix**, create a `feature/<slug>` or `fix/<slug>` branch (not `docs/<slug>`), since the plan is part of delivering that feature/fix.
+- Use `docs/<slug>` only when the entire change is documentation/guidance and is not tied to implementing a feature/fix/chore.
+
 ## Procedure
 
 1. Check `git status -sb` and `git branch --show-current`.
