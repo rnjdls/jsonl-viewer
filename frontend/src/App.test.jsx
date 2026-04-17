@@ -428,6 +428,102 @@ describe("App admin confirmations and lock", () => {
     );
   });
 
+  it("reloads page 1 preview with empty payload when clearing applied filters", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "level");
+    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filters: [
+          expect.objectContaining({
+            type: "field",
+            fieldPath: "level",
+            op: "contains",
+            valueContains: "error",
+          }),
+        ],
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "✕ Clear all" }));
+
+    await waitFor(() => {
+      expect(api.getCounts).toHaveBeenCalledTimes(3);
+    });
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(3);
+    });
+    expect(api.getCounts).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        filtersOp: "and",
+        filters: [],
+      })
+    );
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        filtersOp: "and",
+        filters: [],
+        cursor: null,
+        sortDir: "desc",
+        limit: 10,
+      })
+    );
+  });
+
+  it("reloads page 1 preview with empty payload when clearing draft-only filters", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitForInitialLoad();
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "+ Field" }));
+    await user.type(screen.getByLabelText("Field key"), "level");
+    await user.type(screen.getByLabelText("Match value"), "error");
+
+    await user.click(screen.getByRole("button", { name: "✕ Clear all" }));
+
+    await waitFor(() => {
+      expect(api.getCounts).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(api.getPreview).toHaveBeenCalledTimes(2);
+    });
+    expect(api.getCounts).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filtersOp: "and",
+        filters: [],
+      })
+    );
+    expect(api.getPreview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filtersOp: "and",
+        filters: [],
+        cursor: null,
+        sortDir: "desc",
+        limit: 10,
+      })
+    );
+  });
+
   it("keeps filtered preview working and defers exact counts while ingest is behind", async () => {
     const user = userEvent.setup();
     api.getStats.mockResolvedValue({
