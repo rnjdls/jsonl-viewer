@@ -8,6 +8,11 @@ import java.util.List;
 final class PreviewQueryBuilder {
   static final String SORT_DIR_ASC = "asc";
   static final String SORT_DIR_DESC = "desc";
+  private static final String BASE_SELECT =
+      "SELECT e.id, e.line_no, e.ts, e.parsed->'key', e.parsed->'headers', e.parse_error, " +
+          "CASE WHEN e.parse_error IS NOT NULL THEN LEFT(e.raw_line, 500) ELSE NULL END AS raw_snippet, " +
+          "CASE WHEN e.parse_error IS NOT NULL THEN LENGTH(e.raw_line) > 500 ELSE NULL END AS raw_truncated " +
+          "FROM jsonl_entry e ";
 
   private PreviewQueryBuilder() {}
 
@@ -17,16 +22,37 @@ final class PreviewQueryBuilder {
       PreviewCursor cursor,
       int limit
   ) {
-    StringBuilder sql = new StringBuilder(
-        "SELECT e.id, e.line_no, e.ts, e.parsed->'key', e.parsed->'headers', e.parse_error, " +
-            "CASE WHEN e.parse_error IS NOT NULL THEN LEFT(e.raw_line, 500) ELSE NULL END AS raw_snippet, " +
-            "CASE WHEN e.parse_error IS NOT NULL THEN LENGTH(e.raw_line) > 500 ELSE NULL END AS raw_truncated " +
-            "FROM jsonl_entry e " +
-            "JOIN (" + filterSql.candidateIdsSql() + ") candidate_ids ON candidate_ids.id = e.id " +
-            "WHERE e.file_path = ?1 "
-    );
+    StringBuilder sql = new StringBuilder(BASE_SELECT)
+        .append("JOIN (")
+        .append(filterSql.candidateIdsSql())
+        .append(") candidate_ids ON candidate_ids.id = e.id ")
+        .append("WHERE e.file_path = ?1 ");
     List<Object> queryParams = new ArrayList<>();
     int nextParamIndex = filterSql.params().size() + 2;
+
+    if (cursor != null) {
+      nextParamIndex = appendLineNoPredicate(sql, queryParams, nextParamIndex, sortDir, cursor);
+    }
+
+    sql.append("ORDER BY ").append(orderBy(sortDir)).append(" ");
+    sql.append("LIMIT ?").append(nextParamIndex);
+    queryParams.add(limit);
+
+    return new PreviewQuery(sql.toString(), queryParams);
+  }
+
+  static PreviewQuery buildTextOnly(
+      String sortDir,
+      PreviewCursor cursor,
+      int limit
+  ) {
+    StringBuilder sql = new StringBuilder(BASE_SELECT)
+        .append("WHERE e.file_path = ?1 ")
+        .append("AND e.search_text IS NOT NULL ")
+        .append("AND to_tsvector('simple', e.search_text) @@ ")
+        .append("plainto_tsquery('simple', regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g')) ");
+    List<Object> queryParams = new ArrayList<>();
+    int nextParamIndex = 3;
 
     if (cursor != null) {
       nextParamIndex = appendLineNoPredicate(sql, queryParams, nextParamIndex, sortDir, cursor);

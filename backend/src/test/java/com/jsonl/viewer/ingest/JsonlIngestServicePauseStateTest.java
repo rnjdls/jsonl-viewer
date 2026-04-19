@@ -21,6 +21,7 @@ class JsonlIngestServicePauseStateTest {
     JsonlEntryRepository jsonlEntryRepository = mock(JsonlEntryRepository.class);
     IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
     JsonFieldIndexExtractor fieldIndexExtractor = mock(JsonFieldIndexExtractor.class);
+    JsonSearchDocumentExtractor searchDocumentExtractor = mock(JsonSearchDocumentExtractor.class);
     EntityManager entityManager = mock(EntityManager.class);
     IngestPauseState pauseState = new IngestPauseState();
     pauseState.pause();
@@ -33,6 +34,7 @@ class JsonlIngestServicePauseStateTest {
         pauseState,
         new JsonlEntryParser(new ObjectMapper()),
         fieldIndexExtractor,
+        searchDocumentExtractor,
         entityManager
     );
 

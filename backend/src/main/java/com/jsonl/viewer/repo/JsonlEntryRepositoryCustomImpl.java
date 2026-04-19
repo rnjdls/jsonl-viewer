@@ -57,23 +57,32 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     bindFilterQueryParameters(query, filePath, filterSql.params());
     bindAdditionalQueryParameters(query, filterSql.params().size() + 2, previewQuery.params());
 
-    @SuppressWarnings("unchecked")
-    List<Object[]> rows = query.getResultList();
+    return mapPreviewRows(query);
+  }
 
-    List<JsonlEntryRow> result = new ArrayList<>(rows.size());
-    for (Object[] row : rows) {
-      result.add(new JsonlEntryRow(
-          asLong(row[0]),
-          asLong(row[1]),
-          asInstant(row[2]),
-          asJsonNode(row[3]),
-          asJsonNode(row[4]),
-          row[5] == null ? null : row[5].toString(),
-          row[6] == null ? null : row[6].toString(),
-          asBoolean(row[7])
-      ));
-    }
-    return result;
+  @Override
+  @Transactional(readOnly = true)
+  public List<JsonlEntryRow> previewTextOnly(
+      String filePath,
+      String textQuery,
+      String sortDir,
+      PreviewCursor cursor,
+      int limit,
+      Long statementTimeoutMs
+  ) {
+    applyStatementTimeout(statementTimeoutMs);
+    PreviewQuery previewQuery = PreviewQueryBuilder.buildTextOnly(
+        sortDir,
+        cursor,
+        limit
+    );
+
+    Query query = entityManager.createNativeQuery(previewQuery.sql());
+    query.setParameter(1, filePath);
+    query.setParameter(2, textQuery);
+    bindAdditionalQueryParameters(query, 3, previewQuery.params());
+
+    return mapPreviewRows(query);
   }
 
   @Override
@@ -182,5 +191,25 @@ public class JsonlEntryRepositoryCustomImpl implements JsonlEntryRepositoryCusto
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  private List<JsonlEntryRow> mapPreviewRows(Query query) {
+    @SuppressWarnings("unchecked")
+    List<Object[]> rows = query.getResultList();
+
+    List<JsonlEntryRow> result = new ArrayList<>(rows.size());
+    for (Object[] row : rows) {
+      result.add(new JsonlEntryRow(
+          asLong(row[0]),
+          asLong(row[1]),
+          asInstant(row[2]),
+          asJsonNode(row[3]),
+          asJsonNode(row[4]),
+          row[5] == null ? null : row[5].toString(),
+          row[6] == null ? null : row[6].toString(),
+          asBoolean(row[7])
+      ));
+    }
+    return result;
   }
 }

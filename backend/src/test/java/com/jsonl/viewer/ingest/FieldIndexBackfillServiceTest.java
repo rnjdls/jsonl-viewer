@@ -33,9 +33,12 @@ class FieldIndexBackfillServiceTest {
   void backfillOneSourceRebuildsFieldIndexAndMarksSourceReady() throws Exception {
     IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
     JsonFieldIndexExtractor fieldIndexExtractor = mock(JsonFieldIndexExtractor.class);
+    JsonSearchDocumentExtractor searchDocumentExtractor = mock(JsonSearchDocumentExtractor.class);
     EntityManager entityManager = mock(EntityManager.class);
     Query deleteQuery = mock(Query.class);
+    Query resetSearchTextQuery = mock(Query.class);
     Query selectQuery = mock(Query.class);
+    Query updateSearchTextQuery = mock(Query.class);
 
     IngestState state = new IngestState(
         "source-a",
@@ -58,12 +61,21 @@ class FieldIndexBackfillServiceTest {
     when(entityManager.createNativeQuery(argThat(sql ->
         sql != null && sql.contains("DELETE FROM jsonl_entry_field_index")))).thenReturn(deleteQuery);
     when(entityManager.createNativeQuery(argThat(sql ->
+        sql != null && sql.contains("UPDATE jsonl_entry SET search_text = NULL")))).thenReturn(resetSearchTextQuery);
+    when(entityManager.createNativeQuery(argThat(sql ->
         sql != null && sql.contains("SELECT id, parsed")))).thenReturn(selectQuery);
+    when(entityManager.createNativeQuery(argThat(sql ->
+        sql != null && sql.contains("UPDATE jsonl_entry SET search_text = ?1 WHERE id = ?2"))))
+        .thenReturn(updateSearchTextQuery);
 
     when(deleteQuery.setParameter(anyInt(), any())).thenReturn(deleteQuery);
     when(deleteQuery.executeUpdate()).thenReturn(1);
+    when(resetSearchTextQuery.setParameter(anyInt(), any())).thenReturn(resetSearchTextQuery);
+    when(resetSearchTextQuery.executeUpdate()).thenReturn(1);
 
     when(selectQuery.setParameter(anyInt(), any())).thenReturn(selectQuery);
+    when(updateSearchTextQuery.setParameter(anyInt(), any())).thenReturn(updateSearchTextQuery);
+    when(updateSearchTextQuery.executeUpdate()).thenReturn(1);
 
     PGobject pgObject = new PGobject();
     pgObject.setType("jsonb");
@@ -85,10 +97,12 @@ class FieldIndexBackfillServiceTest {
     );
     when(fieldIndexExtractor.extract(eq("source-a"), eq(11L), any(JsonNode.class)))
         .thenReturn(List.of(indexRow));
+    when(searchDocumentExtractor.extract(any(JsonNode.class))).thenReturn("headers status ok");
 
     FieldIndexBackfillService service = new FieldIndexBackfillService(
         ingestStateRepository,
         fieldIndexExtractor,
+        searchDocumentExtractor,
         new ObjectMapper(),
         entityManager,
         mock(PlatformTransactionManager.class)
@@ -98,6 +112,8 @@ class FieldIndexBackfillServiceTest {
 
     assertTrue(processed);
     verify(deleteQuery).executeUpdate();
+    verify(resetSearchTextQuery).executeUpdate();
+    verify(updateSearchTextQuery).executeUpdate();
     verify(entityManager).persist(indexRow);
     verify(entityManager).flush();
     verify(entityManager).clear();
@@ -118,6 +134,7 @@ class FieldIndexBackfillServiceTest {
     FieldIndexBackfillService service = new FieldIndexBackfillService(
         ingestStateRepository,
         mock(JsonFieldIndexExtractor.class),
+        mock(JsonSearchDocumentExtractor.class),
         new ObjectMapper(),
         mock(EntityManager.class),
         mock(PlatformTransactionManager.class)

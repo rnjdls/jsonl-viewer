@@ -1,6 +1,7 @@
 package com.jsonl.viewer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jsonl.viewer.api.dto.FilterCountRequest;
@@ -118,8 +119,18 @@ class FilterServiceTest {
     assertEquals(1, sql.params().size());
     assertEquals("worker failed", sql.params().get(0));
     assertTrue(sql.candidateIdsSql().contains("SELECT id FROM jsonl_entry"));
-    assertTrue(sql.candidateIdsSql().contains("parsed IS NOT NULL"));
-    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
+    assertTrue(sql.candidateIdsSql().contains("search_text IS NOT NULL"));
+    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g'))"));
+  }
+
+  @Test
+  void buildFilterSqlKeepsHyphenatedTextQueryAsSingleInputParam() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("text", null, null, null, "Auto-generated")
+    ));
+
+    assertEquals(List.of("Auto-generated"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g')"));
   }
 
   @Test
@@ -196,7 +207,7 @@ class FilterServiceTest {
     );
 
     assertEquals(List.of("timeout", "status"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g')"));
     assertTrue(sql.candidateIdsSql().contains("field_key = ?3"));
     assertTrue(sql.candidateIdsSql().contains(" UNION "));
   }
@@ -214,10 +225,33 @@ class FilterServiceTest {
 
     assertEquals(List.of("status", "worker failed", "details", "%Auto-generated%"), sql.params());
     assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
-    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?3)"));
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?3, '[^[:alnum:]]+', ' ', 'g')"));
     assertTrue(sql.candidateIdsSql().contains("field_key = ?4"));
     assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?5"));
     assertTrue(sql.candidateIdsSql().contains(" INTERSECT "));
+  }
+
+  @Test
+  void extractSingleTextQueryReturnsQueryWhenOnlyOneTextFilterExists() {
+    String query = filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("text", null, null, null, "gateway timeout")
+    ));
+
+    assertEquals("gateway timeout", query);
+  }
+
+  @Test
+  void extractSingleTextQueryReturnsNullWhenFilterSetIsNotTextOnly() {
+    assertNull(filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("field", "status", "contains", "500", null)
+    )));
+    assertNull(filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("text", null, null, null, "timeout"),
+        new FilterCriteria("field", "status", "contains", "500", null)
+    )));
+    assertNull(filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("text", null, null, null, "   ")
+    )));
   }
 
   @Test

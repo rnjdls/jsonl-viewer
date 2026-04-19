@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonl.viewer.api.dto.PreviewRequest;
 import com.jsonl.viewer.api.dto.PreviewResponse;
+import com.jsonl.viewer.api.dto.FilterSpec;
 import com.jsonl.viewer.config.AppProperties;
 import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.ingest.IngestAdminService;
@@ -114,6 +115,78 @@ class JsonlControllerPreviewTest {
     assertEquals("{\"raw\":1}", response.rows().get(0).rawSnippet());
     assertEquals(true, response.rows().get(0).rawTruncated());
     assertNotNull(response.nextCursor());
+  }
+
+  @Test
+  void previewUsesTextOnlyFastPathWhenOnlySingleTextFilterIsProvided() {
+    AppProperties properties = appProperties();
+    JsonlEntryRepository repository = org.mockito.Mockito.mock(JsonlEntryRepository.class);
+    when(repository.previewTextOnly(any(), any(), any(), any(), anyInt(), nullable(Long.class)))
+        .thenReturn(List.of());
+    IngestStateRepository ingestStateRepository = org.mockito.Mockito.mock(IngestStateRepository.class);
+    when(ingestStateRepository.findById(jsonlFilePath(properties))).thenReturn(Optional.empty());
+    JsonlController controller = controller(
+        properties,
+        repository,
+        ingestStateRepository,
+        new PreviewCursorCodec(new ObjectMapper())
+    );
+
+    FilterSpec text = new FilterSpec();
+    text.setType("text");
+    text.setQuery("gateway timeout");
+    PreviewRequest request = new PreviewRequest();
+    request.setFilters(List.of(text));
+
+    controller.preview(request);
+
+    verify(repository).previewTextOnly(
+        eq(jsonlFilePath(properties)),
+        eq("gateway timeout"),
+        eq("desc"),
+        isNull(),
+        eq(10),
+        nullable(Long.class)
+    );
+    verify(repository, never()).preview(any(), any(), any(), any(), anyInt(), nullable(Long.class));
+  }
+
+  @Test
+  void previewUsesGenericPathWhenTextAndFieldFiltersAreMixed() {
+    AppProperties properties = appProperties();
+    JsonlEntryRepository repository = org.mockito.Mockito.mock(JsonlEntryRepository.class);
+    when(repository.preview(any(), any(), any(), any(), anyInt(), nullable(Long.class)))
+        .thenReturn(List.of());
+    IngestStateRepository ingestStateRepository = org.mockito.Mockito.mock(IngestStateRepository.class);
+    when(ingestStateRepository.findById(jsonlFilePath(properties))).thenReturn(Optional.empty());
+    JsonlController controller = controller(
+        properties,
+        repository,
+        ingestStateRepository,
+        new PreviewCursorCodec(new ObjectMapper())
+    );
+
+    FilterSpec text = new FilterSpec();
+    text.setType("text");
+    text.setQuery("gateway timeout");
+    FilterSpec field = new FilterSpec();
+    field.setType("field");
+    field.setFieldPath("headers.status");
+    field.setValueContains("500");
+    PreviewRequest request = new PreviewRequest();
+    request.setFilters(List.of(text, field));
+
+    controller.preview(request);
+
+    verify(repository).preview(
+        eq(jsonlFilePath(properties)),
+        any(),
+        eq("desc"),
+        isNull(),
+        eq(10),
+        nullable(Long.class)
+    );
+    verify(repository, never()).previewTextOnly(any(), any(), any(), any(), anyInt(), nullable(Long.class));
   }
 
   private AppProperties appProperties() {

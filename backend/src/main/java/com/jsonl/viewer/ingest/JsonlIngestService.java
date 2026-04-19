@@ -41,6 +41,7 @@ public class JsonlIngestService {
   private final IngestPauseState pauseState;
   private final JsonlEntryParser jsonlEntryParser;
   private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
+  private final JsonSearchDocumentExtractor jsonSearchDocumentExtractor;
   private final EntityManager entityManager;
   private final ReentrantLock ingestLock = new ReentrantLock();
 
@@ -52,6 +53,7 @@ public class JsonlIngestService {
       IngestPauseState pauseState,
       JsonlEntryParser jsonlEntryParser,
       JsonFieldIndexExtractor jsonFieldIndexExtractor,
+      JsonSearchDocumentExtractor jsonSearchDocumentExtractor,
       EntityManager entityManager
   ) {
     this.properties = properties;
@@ -61,6 +63,7 @@ public class JsonlIngestService {
     this.pauseState = pauseState;
     this.jsonlEntryParser = jsonlEntryParser;
     this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
+    this.jsonSearchDocumentExtractor = jsonSearchDocumentExtractor;
     this.entityManager = entityManager;
   }
 
@@ -345,6 +348,7 @@ public class JsonlIngestService {
         rawLine,
         parseResult.parsed(),
         parseResult.parseError(),
+        jsonSearchDocumentExtractor.extract(parseResult.parsed()),
         parseResult.ts()
     );
   }

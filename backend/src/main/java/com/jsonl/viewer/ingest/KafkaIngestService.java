@@ -46,6 +46,7 @@ public class KafkaIngestService {
   private final IngestPauseState pauseState;
   private final JsonlEntryParser jsonlEntryParser;
   private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
+  private final JsonSearchDocumentExtractor jsonSearchDocumentExtractor;
   private final EntityManager entityManager;
   private final ConsumerFactory<String, String> consumerFactory;
   private final KafkaListenerEndpointRegistry listenerRegistry;
@@ -58,6 +59,7 @@ public class KafkaIngestService {
       IngestPauseState pauseState,
       JsonlEntryParser jsonlEntryParser,
       JsonFieldIndexExtractor jsonFieldIndexExtractor,
+      JsonSearchDocumentExtractor jsonSearchDocumentExtractor,
       EntityManager entityManager,
       ConsumerFactory<String, String> consumerFactory,
       KafkaListenerEndpointRegistry listenerRegistry
@@ -69,6 +71,7 @@ public class KafkaIngestService {
     this.pauseState = pauseState;
     this.jsonlEntryParser = jsonlEntryParser;
     this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
+    this.jsonSearchDocumentExtractor = jsonSearchDocumentExtractor;
     this.entityManager = entityManager;
     this.consumerFactory = consumerFactory;
     this.listenerRegistry = listenerRegistry;
@@ -113,6 +116,7 @@ public class KafkaIngestService {
           rawLine,
           parseResult.parsed(),
           parseResult.parseError(),
+          jsonSearchDocumentExtractor.extract(parseResult.parsed()),
           parseResult.ts()
       );
       batch.add(entry);

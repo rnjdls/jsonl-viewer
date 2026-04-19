@@ -77,8 +77,9 @@ public class FilterService {
         if (query.isEmpty()) continue;
         candidateIdQueries.add(
             "SELECT id FROM jsonl_entry " +
-                "WHERE file_path = ?1 AND parsed IS NOT NULL " +
-                "AND to_tsvector('simple', parsed::text) @@ plainto_tsquery('simple', ?" + nextParamIndex + ")"
+                "WHERE file_path = ?1 AND search_text IS NOT NULL " +
+                "AND to_tsvector('simple', search_text) @@ " +
+                "plainto_tsquery('simple', regexp_replace(?" + nextParamIndex + ", '[^[:alnum:]]+', ' ', 'g'))"
         );
         params.add(query);
         nextParamIndex++;
@@ -92,6 +93,18 @@ public class FilterService {
     String setOperator = useOrMode ? " UNION " : " INTERSECT ";
     String candidateIdsSql = String.join(setOperator, candidateIdQueries);
     return new FilterSql(candidateIdsSql, params);
+  }
+
+  public String extractSingleTextQuery(List<FilterCriteria> filters) {
+    if (filters == null || filters.size() != 1) {
+      return null;
+    }
+    FilterCriteria onlyFilter = filters.get(0);
+    if (onlyFilter == null || onlyFilter.type() == null || !onlyFilter.type().equalsIgnoreCase("text")) {
+      return null;
+    }
+    String query = safeTrim(onlyFilter.query());
+    return query.isEmpty() ? null : query;
   }
 
   public String normalizeFiltersOp(String rawFiltersOp) {

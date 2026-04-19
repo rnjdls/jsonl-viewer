@@ -216,7 +216,6 @@ public class JsonlController {
 
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
     List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
 
     String sortDir = normalizeSortDir(safeRequest.getSortDir());
     PreviewCursor cursor = decodePreviewCursor(
@@ -224,15 +223,29 @@ public class JsonlController {
         sortDir
     );
     int limit = safeRequest.getLimit() == null ? 10 : Math.min(500, Math.max(1, safeRequest.getLimit()));
+    String singleTextQuery = filterService.extractSingleTextQuery(filters);
 
-    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(
-        sourceId,
-        filterSql,
-        sortDir,
-        cursor,
-        limit,
-        toMillis(properties.getPreviewStatementTimeout())
-    );
+    List<JsonlEntryRow> rows;
+    if (singleTextQuery != null) {
+      rows = jsonlEntryRepository.previewTextOnly(
+          sourceId,
+          singleTextQuery,
+          sortDir,
+          cursor,
+          limit,
+          toMillis(properties.getPreviewStatementTimeout())
+      );
+    } else {
+      FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
+      rows = jsonlEntryRepository.preview(
+          sourceId,
+          filterSql,
+          sortDir,
+          cursor,
+          limit,
+          toMillis(properties.getPreviewStatementTimeout())
+      );
+    }
     List<PreviewRow> responseRows = rows.stream()
         .map(row -> new PreviewRow(
             row.id(),

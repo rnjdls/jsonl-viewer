@@ -15,6 +15,15 @@ public interface JsonlEntryRepositoryCustom {
       Long statementTimeoutMs
   );
 
+  List<JsonlEntryRow> previewTextOnly(
+      String filePath,
+      String textQuery,
+      String sortDir,
+      PreviewCursor cursor,
+      int limit,
+      Long statementTimeoutMs
+  );
+
   Optional<JsonlEntryDetailRow> findEntryDetail(String filePath, long id);
 
   Optional<String> findRawLine(String filePath, long id);

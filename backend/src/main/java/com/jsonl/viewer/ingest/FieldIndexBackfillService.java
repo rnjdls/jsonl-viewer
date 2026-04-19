@@ -28,6 +28,7 @@ public class FieldIndexBackfillService {
 
   private final IngestStateRepository ingestStateRepository;
   private final JsonFieldIndexExtractor fieldIndexExtractor;
+  private final JsonSearchDocumentExtractor searchDocumentExtractor;
   private final ObjectMapper objectMapper;
   private final EntityManager entityManager;
   private final TransactionTemplate transactionTemplate;
@@ -36,12 +37,14 @@ public class FieldIndexBackfillService {
   public FieldIndexBackfillService(
       IngestStateRepository ingestStateRepository,
       JsonFieldIndexExtractor fieldIndexExtractor,
+      JsonSearchDocumentExtractor searchDocumentExtractor,
       ObjectMapper objectMapper,
       EntityManager entityManager,
       PlatformTransactionManager transactionManager
   ) {
     this.ingestStateRepository = ingestStateRepository;
     this.fieldIndexExtractor = fieldIndexExtractor;
+    this.searchDocumentExtractor = searchDocumentExtractor;
     this.objectMapper = objectMapper;
     this.entityManager = entityManager;
     this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -82,6 +85,9 @@ public class FieldIndexBackfillService {
     entityManager.createNativeQuery("DELETE FROM jsonl_entry_field_index WHERE file_path = ?1")
         .setParameter(1, filePath)
         .executeUpdate();
+    entityManager.createNativeQuery("UPDATE jsonl_entry SET search_text = NULL WHERE file_path = ?1")
+        .setParameter(1, filePath)
+        .executeUpdate();
 
     long lastSeenId = 0L;
     while (true) {
@@ -110,6 +116,10 @@ public class FieldIndexBackfillService {
         if (parsed == null) {
           continue;
         }
+        entityManager.createNativeQuery("UPDATE jsonl_entry SET search_text = ?1 WHERE id = ?2")
+            .setParameter(1, searchDocumentExtractor.extract(parsed))
+            .setParameter(2, entryId)
+            .executeUpdate();
         indexRows.addAll(fieldIndexExtractor.extract(filePath, entryId, parsed));
       }
 

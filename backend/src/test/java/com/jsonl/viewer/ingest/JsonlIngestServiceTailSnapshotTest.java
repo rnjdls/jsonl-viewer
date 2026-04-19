@@ -58,6 +58,7 @@ class JsonlIngestServiceTailSnapshotTest {
       JsonlEntryRepository jsonlEntryRepository = mock(JsonlEntryRepository.class);
       IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
       JsonFieldIndexExtractor fieldIndexExtractor = mock(JsonFieldIndexExtractor.class);
+      JsonSearchDocumentExtractor searchDocumentExtractor = mock(JsonSearchDocumentExtractor.class);
       EntityManager entityManager = mock(EntityManager.class);
 
       when(ingestStateRepository.findById(jsonlFile.toString())).thenReturn(Optional.empty());
@@ -65,6 +66,7 @@ class JsonlIngestServiceTailSnapshotTest {
           .thenAnswer((Answer<IngestState>) invocation -> invocation.getArgument(0));
       when(fieldIndexExtractor.extract(any(String.class), any(Long.class), any()))
           .thenReturn(List.of());
+      when(searchDocumentExtractor.extract(any())).thenReturn("seq");
 
       AtomicInteger persistedCount = new AtomicInteger();
       org.mockito.Mockito.doAnswer(invocation -> {
@@ -82,6 +84,7 @@ class JsonlIngestServiceTailSnapshotTest {
           new IngestPauseState(),
           new JsonlEntryParser(new ObjectMapper()),
           fieldIndexExtractor,
+          searchDocumentExtractor,
           entityManager
       );
 
