@@ -1,33 +1,14 @@
 package com.jsonl.viewer.api.dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import java.util.List;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class PreviewRequest {
-  private String fieldPath;
-  private String valueContains;
   private String filtersOp;
   private List<FilterSpec> filters;
   private String sortDir;
   private String cursor;
   private Integer limit;
-
-  public String getFieldPath() {
-    return fieldPath;
-  }
-
-  public void setFieldPath(String fieldPath) {
-    this.fieldPath = fieldPath;
-  }
-
-  public String getValueContains() {
-    return valueContains;
-  }
-
-  public void setValueContains(String valueContains) {
-    this.valueContains = valueContains;
-  }
 
   public String getFiltersOp() {
     return filtersOp;
@@ -67,5 +48,10 @@ public class PreviewRequest {
 
   public void setLimit(Integer limit) {
     this.limit = limit;
+  }
+
+  @JsonAnySetter
+  public void rejectUnknown(String property, Object value) {
+    throw new IllegalArgumentException("Unsupported filters/preview property: " + property);
   }
 }

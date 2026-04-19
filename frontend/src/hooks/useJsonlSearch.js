@@ -1,21 +1,9 @@
 import { useState, useMemo, useCallback } from "react";
 import { entryMatchesFilters, isFilterActive } from "../utils/search";
-import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
+import { FILTERS_OP, FILTER_TYPE } from "../constants";
 
 let _nextId = 1;
 const nextId = () => String(_nextId++);
-
-/**
- * Creates a blank field filter.
- * @returns {import("../utils/search").FieldFilter}
- */
-const makeFieldFilter = () => ({
-  id: nextId(),
-  type: FILTER_TYPE.FIELD,
-  op: FIELD_FILTER_OP.CONTAINS,
-  field: "",
-  value: "",
-});
 
 /**
  * Creates a blank full-text filter.
@@ -53,11 +41,6 @@ export function useJsonlSearch(lines) {
   );
 
   /* ── Mutators ────────────────────────────────────────── */
-  const addFieldFilter = useCallback(
-    () => setFilters((prev) => [...prev, makeFieldFilter()]),
-    []
-  );
-
   const addTextFilter = useCallback(
     () => setFilters((prev) => [...prev, makeTextFilter()]),
     []
@@ -92,7 +75,6 @@ export function useJsonlSearch(lines) {
     hasFilters: filters.length > 0,
     hasActiveFilters: activeFilters.length > 0,
     hasAppliedFilters: appliedFilters.length > 0,
-    addFieldFilter,
     addTextFilter,
     setFiltersOp,
     updateFilter,

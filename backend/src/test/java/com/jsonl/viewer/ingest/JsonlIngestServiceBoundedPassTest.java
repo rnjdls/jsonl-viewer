@@ -90,7 +90,6 @@ class JsonlIngestServiceBoundedPassTest {
 
     JsonlEntryRepository jsonlEntryRepository = mock(JsonlEntryRepository.class);
     IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
-    JsonFieldIndexExtractor fieldIndexExtractor = mock(JsonFieldIndexExtractor.class);
     JsonSearchDocumentExtractor searchDocumentExtractor = mock(JsonSearchDocumentExtractor.class);
     EntityManager entityManager = mock(EntityManager.class);
 
@@ -103,7 +102,6 @@ class JsonlIngestServiceBoundedPassTest {
           stateRef.set(copyState(state));
           return state;
         });
-    when(fieldIndexExtractor.extract(any(String.class), any(Long.class), any())).thenReturn(List.of());
     when(searchDocumentExtractor.extract(any())).thenReturn("event token");
 
     List<Long> persistedLineNos = new ArrayList<>();
@@ -120,7 +118,6 @@ class JsonlIngestServiceBoundedPassTest {
         ingestStateRepository,
         new IngestPauseState(),
         new JsonlEntryParser(new ObjectMapper()),
-        fieldIndexExtractor,
         searchDocumentExtractor,
         entityManager
     );

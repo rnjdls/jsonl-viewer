@@ -25,7 +25,6 @@ import {
   formatDateTimeTooltip,
   formatTime,
 } from "./utils/datetime";
-import { FIELD_FILTER_OP } from "./constants";
 
 import "./App.css";
 
@@ -69,15 +68,6 @@ function toFilterPayload(filters, filtersOp) {
   return {
     filtersOp,
     filters: filters.map((filter) => {
-      if (filter.type === "field") {
-        const op = filter.op || FIELD_FILTER_OP.CONTAINS;
-        return {
-          type: "field",
-          fieldPath: filter.field,
-          op,
-          ...(op === FIELD_FILTER_OP.CONTAINS ? { valueContains: filter.value } : {}),
-        };
-      }
       if (filter.type === "text") {
         return {
           type: "text",
@@ -338,7 +328,6 @@ export default function App() {
     hasFilters,
     hasActiveFilters,
     hasAppliedFilters,
-    addFieldFilter,
     addTextFilter,
     setFiltersOp,
     updateFilter,
@@ -956,7 +945,6 @@ export default function App() {
         loading={countsLoading}
         countStatus={searchBarCountStatus}
         globalDisabled={uiLocked}
-        onAddFieldFilter={addFieldFilter}
         onAddTextFilter={addTextFilter}
         onUpdateFilter={updateFilter}
         onRemoveFilter={removeFilter}

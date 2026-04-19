@@ -152,7 +152,7 @@ class JsonlControllerPreviewTest {
   }
 
   @Test
-  void previewUsesGenericPathWhenTextAndFieldFiltersAreMixed() {
+  void previewUsesGenericPathWhenMultipleTextFiltersAreProvided() {
     AppProperties properties = appProperties();
     JsonlEntryRepository repository = org.mockito.Mockito.mock(JsonlEntryRepository.class);
     when(repository.preview(any(), any(), any(), any(), anyInt(), nullable(Long.class)))
@@ -169,12 +169,11 @@ class JsonlControllerPreviewTest {
     FilterSpec text = new FilterSpec();
     text.setType("text");
     text.setQuery("gateway timeout");
-    FilterSpec field = new FilterSpec();
-    field.setType("field");
-    field.setFieldPath("headers.status");
-    field.setValueContains("500");
+    FilterSpec secondText = new FilterSpec();
+    secondText.setType("text");
+    secondText.setQuery("worker failed");
     PreviewRequest request = new PreviewRequest();
-    request.setFilters(List.of(text, field));
+    request.setFilters(List.of(text, secondText));
 
     controller.preview(request);
 

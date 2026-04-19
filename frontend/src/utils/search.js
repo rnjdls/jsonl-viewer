@@ -1,17 +1,4 @@
-import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
-
-/**
- * @typedef {"contains" | "null" | "not_null" | "empty" | "not_empty"} FieldFilterOp
- */
-
-/**
- * @typedef {Object} FieldFilter
- * @property {string} id
- * @property {"field"} type
- * @property {FieldFilterOp} op
- * @property {string} field - Leaf key indexed under top-level header/headers roots.
- * @property {string} value - Partial match string.
- */
+import { FILTERS_OP, FILTER_TYPE } from "../constants";
 
 /**
  * @typedef {Object} TextFilter
@@ -20,41 +7,8 @@ import { FIELD_FILTER_OP, FILTERS_OP, FILTER_TYPE } from "../constants";
  * @property {string} query
  */
 
-/** @typedef {FieldFilter | TextFilter} Filter */
+/** @typedef {TextFilter} Filter */
 /** @typedef {"and" | "or"} FiltersOp */
-
-function collectHeaderLeafValuesByKey(node, key, out = []) {
-  if (node === null || node === undefined || Array.isArray(node) || typeof node !== "object") {
-    return out;
-  }
-
-  for (const [entryKey, entryValue] of Object.entries(node)) {
-    if (entryValue !== null && typeof entryValue === "object") {
-      if (!Array.isArray(entryValue)) {
-        collectHeaderLeafValuesByKey(entryValue, key, out);
-      }
-      continue;
-    }
-
-    if (entryKey === key) {
-      out.push(entryValue);
-    }
-  }
-  return out;
-}
-
-function getIndexedHeaderLeafValuesByKey(parsed, key) {
-  if (!parsed || typeof parsed !== "object") {
-    return [];
-  }
-
-  const out = [];
-  for (const rootKey of ["header", "headers"]) {
-    const root = parsed[rootKey];
-    collectHeaderLeafValuesByKey(root, key, out);
-  }
-  return out;
-}
 
 function toSearchableText(value) {
   if (typeof value === "string") return value;
@@ -66,28 +20,11 @@ function toSearchableText(value) {
   }
 }
 
-function normalizeFieldFilterOp(rawOp) {
-  const normalized = String(rawOp ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[-\s]+/g, "_");
-
-  if (normalized === FIELD_FILTER_OP.NULL) return FIELD_FILTER_OP.NULL;
-  if (normalized === FIELD_FILTER_OP.NOT_NULL) return FIELD_FILTER_OP.NOT_NULL;
-  if (normalized === FIELD_FILTER_OP.EMPTY) return FIELD_FILTER_OP.EMPTY;
-  if (normalized === FIELD_FILTER_OP.NOT_EMPTY) return FIELD_FILTER_OP.NOT_EMPTY;
-  return FIELD_FILTER_OP.CONTAINS;
-}
-
 function normalizeFiltersOp(rawOp) {
   const normalized = String(rawOp ?? "")
     .trim()
     .toLowerCase();
   return normalized === FILTERS_OP.OR ? FILTERS_OP.OR : FILTERS_OP.AND;
-}
-
-function isEmptyFieldValue(value) {
-  return value === "";
 }
 
 /**
@@ -99,37 +36,6 @@ function isEmptyFieldValue(value) {
  */
 function entryMatchesFilter(entry, filter) {
   if (!entry.parsed) return true; // Always show parse errors.
-
-  if (filter.type === FILTER_TYPE.FIELD) {
-    const { field, value } = filter;
-    const fieldKey = field.trim();
-    if (!fieldKey) return true;
-    const op = normalizeFieldFilterOp(filter.op);
-
-    const values = getIndexedHeaderLeafValuesByKey(entry.parsed, fieldKey);
-    if (values.length === 0) return false;
-
-    if (op === FIELD_FILTER_OP.NULL) {
-      return values.some((entryValue) => entryValue === null);
-    }
-
-    if (op === FIELD_FILTER_OP.NOT_NULL) {
-      return values.some((entryValue) => entryValue !== null);
-    }
-
-    if (op === FIELD_FILTER_OP.EMPTY) {
-      return values.some((entryValue) => isEmptyFieldValue(entryValue));
-    }
-
-    if (op === FIELD_FILTER_OP.NOT_EMPTY) {
-      return values.some((entryValue) => entryValue !== null && !isEmptyFieldValue(entryValue));
-    }
-
-    const needle = (value ?? "").toLowerCase();
-    return values.some((entryValue) =>
-      toSearchableText(entryValue).toLowerCase().includes(needle)
-    );
-  }
 
   if (filter.type === FILTER_TYPE.TEXT) {
     const query = (filter.query ?? "").trim().toLowerCase();
@@ -172,9 +78,6 @@ export function entryMatchesAllFilters(entry, filters) {
 export function isFilterActive(filter) {
   if (filter.hidden) {
     return false;
-  }
-  if (filter.type === FILTER_TYPE.FIELD) {
-    return filter.field.trim().length > 0;
   }
   if (filter.type === FILTER_TYPE.TEXT) {
     return (filter.query ?? "").trim().length > 0;

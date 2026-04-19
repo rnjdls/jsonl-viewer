@@ -4,11 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
-import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
 import jakarta.annotation.PreDestroy;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,34 +20,31 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-public class FieldIndexBackfillService {
-  private static final Logger log = LoggerFactory.getLogger(FieldIndexBackfillService.class);
+public class SearchTextBackfillService {
+  private static final Logger log = LoggerFactory.getLogger(SearchTextBackfillService.class);
   private static final int BACKFILL_BATCH_SIZE = 500;
 
   private final IngestStateRepository ingestStateRepository;
-  private final JsonFieldIndexExtractor fieldIndexExtractor;
   private final JsonSearchDocumentExtractor searchDocumentExtractor;
   private final ObjectMapper objectMapper;
   private final EntityManager entityManager;
   private final TransactionTemplate transactionTemplate;
   private final ExecutorService workerExecutor;
 
-  public FieldIndexBackfillService(
+  public SearchTextBackfillService(
       IngestStateRepository ingestStateRepository,
-      JsonFieldIndexExtractor fieldIndexExtractor,
       JsonSearchDocumentExtractor searchDocumentExtractor,
       ObjectMapper objectMapper,
       EntityManager entityManager,
       PlatformTransactionManager transactionManager
   ) {
     this.ingestStateRepository = ingestStateRepository;
-    this.fieldIndexExtractor = fieldIndexExtractor;
     this.searchDocumentExtractor = searchDocumentExtractor;
     this.objectMapper = objectMapper;
     this.entityManager = entityManager;
     this.transactionTemplate = new TransactionTemplate(transactionManager);
     this.workerExecutor = Executors.newSingleThreadExecutor(r -> {
-      Thread t = new Thread(r, "field-index-backfill-worker");
+      Thread t = new Thread(r, "search-text-backfill-worker");
       t.setDaemon(true);
       return t;
     });
@@ -70,21 +65,18 @@ public class FieldIndexBackfillService {
   }
 
   boolean backfillOneSource() {
-    List<IngestState> pendingSources = ingestStateRepository.findPendingFieldIndexBuilds();
+    List<IngestState> pendingSources = ingestStateRepository.findPendingSearchTextBuilds();
     if (pendingSources.isEmpty()) {
       return false;
     }
 
     IngestState state = pendingSources.get(0);
     String filePath = state.getFilePath();
-    log.info("Starting field-index backfill for {}", filePath);
+    log.info("Starting search-text backfill for {}", filePath);
 
     state.setIngestStatus("building");
     ingestStateRepository.save(state);
 
-    entityManager.createNativeQuery("DELETE FROM jsonl_entry_field_index WHERE file_path = ?1")
-        .setParameter(1, filePath)
-        .executeUpdate();
     entityManager.createNativeQuery("UPDATE jsonl_entry SET search_text = NULL WHERE file_path = ?1")
         .setParameter(1, filePath)
         .executeUpdate();
@@ -108,7 +100,6 @@ public class FieldIndexBackfillService {
         break;
       }
 
-      List<JsonlEntryFieldIndex> indexRows = new ArrayList<>();
       for (Object[] row : rows) {
         long entryId = asLong(row[0]);
         JsonNode parsed = asJsonNode(row[1]);
@@ -120,11 +111,6 @@ public class FieldIndexBackfillService {
             .setParameter(1, searchDocumentExtractor.extract(parsed))
             .setParameter(2, entryId)
             .executeUpdate();
-        indexRows.addAll(fieldIndexExtractor.extract(filePath, entryId, parsed));
-      }
-
-      for (JsonlEntryFieldIndex indexRow : indexRows) {
-        entityManager.persist(indexRow);
       }
       entityManager.flush();
       entityManager.clear();
@@ -134,7 +120,7 @@ public class FieldIndexBackfillService {
     updatedState.setIndexedRevision(updatedState.getSourceRevision());
     updatedState.setIngestStatus("ready");
     ingestStateRepository.save(updatedState);
-    log.info("Completed field-index backfill for {}", filePath);
+    log.info("Completed search-text backfill for {}", filePath);
 
     return true;
   }

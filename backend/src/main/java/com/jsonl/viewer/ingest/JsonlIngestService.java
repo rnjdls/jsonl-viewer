@@ -5,7 +5,6 @@ import com.jsonl.viewer.config.IngestSourceResolver;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
 import com.jsonl.viewer.repo.JsonlEntry;
-import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
 import com.jsonl.viewer.repo.JsonlEntryRepository;
 import jakarta.persistence.EntityManager;
 import java.io.BufferedInputStream;
@@ -40,7 +39,6 @@ public class JsonlIngestService {
   private final IngestStateRepository ingestStateRepository;
   private final IngestPauseState pauseState;
   private final JsonlEntryParser jsonlEntryParser;
-  private final JsonFieldIndexExtractor jsonFieldIndexExtractor;
   private final JsonSearchDocumentExtractor jsonSearchDocumentExtractor;
   private final EntityManager entityManager;
   private final ReentrantLock ingestLock = new ReentrantLock();
@@ -52,7 +50,6 @@ public class JsonlIngestService {
       IngestStateRepository ingestStateRepository,
       IngestPauseState pauseState,
       JsonlEntryParser jsonlEntryParser,
-      JsonFieldIndexExtractor jsonFieldIndexExtractor,
       JsonSearchDocumentExtractor jsonSearchDocumentExtractor,
       EntityManager entityManager
   ) {
@@ -62,7 +59,6 @@ public class JsonlIngestService {
     this.ingestStateRepository = ingestStateRepository;
     this.pauseState = pauseState;
     this.jsonlEntryParser = jsonlEntryParser;
-    this.jsonFieldIndexExtractor = jsonFieldIndexExtractor;
     this.jsonSearchDocumentExtractor = jsonSearchDocumentExtractor;
     this.entityManager = entityManager;
   }
@@ -320,22 +316,6 @@ public class JsonlIngestService {
     for (JsonlEntry entry : batch) {
       entityManager.persist(entry);
     }
-    entityManager.flush();
-
-    for (JsonlEntry entry : batch) {
-      if (entry.getId() == null || entry.getParsed() == null) {
-        continue;
-      }
-      List<JsonlEntryFieldIndex> indexRows = jsonFieldIndexExtractor.extract(
-          entry.getFilePath(),
-          entry.getId(),
-          entry.getParsed()
-      );
-      for (JsonlEntryFieldIndex indexRow : indexRows) {
-        entityManager.persist(indexRow);
-      }
-    }
-
     entityManager.flush();
     entityManager.clear();
   }

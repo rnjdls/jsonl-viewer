@@ -1,16 +1,11 @@
-import {
-  FIELD_FILTER_OP,
-  FIELD_FILTER_OP_OPTIONS,
-  FILTERS_OP,
-  FILTER_TYPE,
-} from "../../constants";
+import { FILTERS_OP, FILTER_TYPE } from "../../constants";
 import "./SearchBar.css";
 
 /**
  * Multi-filter search bar.
  *
- * Renders the list of current filters (field and text filters) and exposes
- * controls to add, edit, and remove them.
+ * Renders the list of current text filters and exposes controls to add,
+ * edit, and remove them.
  *
  * @param {{
  *   filters:           import("../../utils/search").Filter[],
@@ -24,7 +19,6 @@ import "./SearchBar.css";
  *   loading:           boolean,
  *   countStatus:       "deferred" | "pending" | "ready",
  *   globalDisabled:    boolean,
- *   onAddFieldFilter:  () => void,
  *   onAddTextFilter:   () => void,
  *   onFiltersOpChange: (op: import("../../utils/search").FiltersOp) => void,
  *   onUpdateFilter:    (id: string, patch: object) => void,
@@ -45,7 +39,6 @@ export function SearchBar({
   loading,
   countStatus,
   globalDisabled = false,
-  onAddFieldFilter,
   onAddTextFilter,
   onFiltersOpChange,
   onUpdateFilter,
@@ -59,18 +52,9 @@ export function SearchBar({
 
   return (
     <div className="sb">
-      {/* ── Toolbar row ──────────────────────────────────── */}
       <div className="sb-toolbar">
         <span className="sb-toolbar-label">Filters</span>
 
-        <button
-          className="sb-add-btn"
-          onClick={onAddFieldFilter}
-          title="Add field filter"
-          disabled={globalDisabled}
-        >
-          + Field
-        </button>
         <button
           className="sb-add-btn sb-add-btn--text"
           onClick={onAddTextFilter}
@@ -132,21 +116,9 @@ export function SearchBar({
         </span>
       </div>
 
-      {/* ── Filter rows ──────────────────────────────────── */}
       {visibleFilters.length > 0 && (
         <div className="sb-filters">
           {visibleFilters.map((filter) => {
-            if (filter.type === FILTER_TYPE.FIELD) {
-              return (
-                <FieldFilterRow
-                  key={filter.id}
-                  filter={filter}
-                  disabled={globalDisabled}
-                  onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
-                  onRemove={() => onRemoveFilter(filter.id)}
-                />
-              );
-            }
             if (filter.type === FILTER_TYPE.TEXT) {
               return (
                 <TextFilterRow
@@ -165,62 +137,6 @@ export function SearchBar({
     </div>
   );
 }
-
-/* ── FieldFilterRow ─────────────────────────────────────── */
-
-function FieldFilterRow({ filter, onUpdate, onRemove, disabled = false }) {
-  const op = filter.op || FIELD_FILTER_OP.CONTAINS;
-  const isContainsOp = op === FIELD_FILTER_OP.CONTAINS;
-  return (
-    <div className="sb-row sb-row--field">
-      <span className="sb-row-type sb-row-type--field">FIELD</span>
-
-      <input
-        className="sb-input sb-input--field"
-        type="text"
-        placeholder="header/header leaf key (e.g. eventTime)"
-        value={filter.field}
-        onChange={(e) => onUpdate({ field: e.target.value })}
-        spellCheck={false}
-        aria-label="Field key"
-        disabled={disabled}
-      />
-
-      <select
-        className="sb-select sb-select--field-op"
-        value={op}
-        onChange={(e) => onUpdate({ op: e.target.value })}
-        aria-label="Field operation"
-        disabled={disabled}
-      >
-        {FIELD_FILTER_OP_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      {isContainsOp && (
-        <input
-          className="sb-input sb-input--value"
-          type="text"
-          placeholder="value in indexed header fields"
-          value={filter.value}
-          onChange={(e) => onUpdate({ value: e.target.value })}
-          spellCheck={false}
-          aria-label="Match value"
-          disabled={disabled}
-        />
-      )}
-
-      <button className="sb-remove" onClick={onRemove} aria-label="Remove filter" disabled={disabled}>
-        ✕
-      </button>
-    </div>
-  );
-}
-
-/* ── TextFilterRow ─────────────────────────────────────── */
 
 function TextFilterRow({ filter, onUpdate, onRemove, disabled = false }) {
   return (

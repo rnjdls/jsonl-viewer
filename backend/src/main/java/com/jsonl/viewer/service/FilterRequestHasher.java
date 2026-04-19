@@ -16,9 +16,6 @@ public class FilterRequestHasher {
       for (FilterCriteria filter : filters) {
         payload.append('\n')
             .append(nullToEmpty(filter.type())).append('|')
-            .append(nullToEmpty(filter.fieldPath())).append('|')
-            .append(nullToEmpty(filter.op())).append('|')
-            .append(nullToEmpty(filter.valueContains())).append('|')
             .append(nullToEmpty(filter.query()));
       }
     }

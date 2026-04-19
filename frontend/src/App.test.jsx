@@ -176,7 +176,7 @@ describe("App admin confirmations and lock", () => {
 
     expect(screen.getByText("Reloading source...")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "+ Field" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "+ Text" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Open admin menu" })).toBeDisabled();
 
     reloadRequest.resolve(null);
@@ -192,7 +192,7 @@ describe("App admin confirmations and lock", () => {
       expect(screen.queryByText("Reloading source...")).not.toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "+ Field" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "+ Text" })).toBeEnabled();
   });
 
   it("unlocks after first pending count response and keeps pending polling active", async () => {
@@ -238,7 +238,7 @@ describe("App admin confirmations and lock", () => {
     });
     expect(screen.queryByText("Reloading source...")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "+ Field" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "+ Text" })).toBeEnabled();
   });
 
   it("does not render the parsed chip in the topbar", async () => {
@@ -401,9 +401,8 @@ describe("App admin confirmations and lock", () => {
       expect(api.getPreview).toHaveBeenCalledTimes(1);
     });
 
-    await user.click(screen.getByRole("button", { name: "+ Field" }));
-    await user.type(screen.getByLabelText("Field key"), "level");
-    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByLabelText("Full text query"), "error");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -415,10 +414,8 @@ describe("App admin confirmations and lock", () => {
         filtersOp: "and",
         filters: [
           expect.objectContaining({
-            type: "field",
-            fieldPath: "level",
-            op: "contains",
-            valueContains: "error",
+            type: "text",
+            query: "error",
           }),
         ],
         cursor: null,
@@ -436,9 +433,8 @@ describe("App admin confirmations and lock", () => {
       expect(api.getPreview).toHaveBeenCalledTimes(1);
     });
 
-    await user.click(screen.getByRole("button", { name: "+ Field" }));
-    await user.type(screen.getByLabelText("Field key"), "level");
-    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByLabelText("Full text query"), "error");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -449,10 +445,8 @@ describe("App admin confirmations and lock", () => {
       expect.objectContaining({
         filters: [
           expect.objectContaining({
-            type: "field",
-            fieldPath: "level",
-            op: "contains",
-            valueContains: "error",
+            type: "text",
+            query: "error",
           }),
         ],
       })
@@ -493,9 +487,8 @@ describe("App admin confirmations and lock", () => {
       expect(api.getPreview).toHaveBeenCalledTimes(1);
     });
 
-    await user.click(screen.getByRole("button", { name: "+ Field" }));
-    await user.type(screen.getByLabelText("Field key"), "level");
-    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByLabelText("Full text query"), "error");
 
     await user.click(screen.getByRole("button", { name: "✕ Clear all" }));
 
@@ -544,9 +537,8 @@ describe("App admin confirmations and lock", () => {
     });
     expect(api.getCounts).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "+ Field" }));
-    await user.type(screen.getByLabelText("Field key"), "level");
-    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByLabelText("Full text query"), "error");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -596,9 +588,8 @@ describe("App admin confirmations and lock", () => {
     });
     expect(api.getCounts).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "+ Field" }));
-    await user.type(screen.getByLabelText("Field key"), "level");
-    await user.type(screen.getByLabelText("Match value"), "error");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getByLabelText("Full text query"), "error");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -668,7 +659,7 @@ describe("App admin confirmations and lock", () => {
     expect(api.getPreview).toHaveBeenCalledTimes(1);
   });
 
-  it("hides timestamp controls and sends only field/text filters", async () => {
+  it("hides timestamp controls and sends only text filters", async () => {
     const user = userEvent.setup();
     render(<App />);
     await waitForInitialLoad();
@@ -678,11 +669,10 @@ describe("App admin confirmations and lock", () => {
 
     expect(screen.queryByRole("button", { name: "+ Timestamp Range" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "+ Field" }));
-    await user.type(screen.getByLabelText("Field key"), "eventTime");
-    await user.type(screen.getByLabelText("Match value"), "2026");
     await user.click(screen.getByRole("button", { name: "+ Text" }));
-    await user.type(screen.getByLabelText("Full text query"), "worker");
+    await user.type(screen.getByLabelText("Full text query"), "eventTime");
+    await user.click(screen.getByRole("button", { name: "+ Text" }));
+    await user.type(screen.getAllByLabelText("Full text query")[1], "worker");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -692,10 +682,8 @@ describe("App admin confirmations and lock", () => {
     const searchPayload = api.getPreview.mock.calls[1][0];
     expect(searchPayload.filters).toEqual([
       expect.objectContaining({
-        type: "field",
-        fieldPath: "eventTime",
-        op: "contains",
-        valueContains: "2026",
+        type: "text",
+        query: "eventTime",
       }),
       expect.objectContaining({
         type: "text",
