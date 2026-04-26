@@ -1,0 +1,162 @@
+import { FILTERS_OP, FILTER_TYPE } from "../../constants";
+import "./SearchBar.css";
+
+/**
+ * Multi-filter search bar.
+ *
+ * Renders the list of current text filters and exposes controls to add,
+ * edit, and remove them.
+ *
+ * @param {{
+ *   filters:           import("../../utils/search").Filter[],
+ *   totalCount:        number,
+ *   matchCount:        number,
+ *   hasFilters:        boolean,
+ *   hasActiveFilters:  boolean,
+ *   hasAppliedFilters: boolean,
+ *   activeCount:       number,
+ *   filtersOp:         import("../../utils/search").FiltersOp,
+ *   loading:           boolean,
+ *   countStatus:       "deferred" | "pending" | "ready",
+ *   globalDisabled:    boolean,
+ *   onAddTextFilter:   () => void,
+ *   onFiltersOpChange: (op: import("../../utils/search").FiltersOp) => void,
+ *   onUpdateFilter:    (id: string, patch: object) => void,
+ *   onRemoveFilter:    (id: string) => void,
+ *   onClearAll:        () => void,
+ *   onSearch:          () => void,
+ * }} props
+ */
+export function SearchBar({
+  filters,
+  totalCount,
+  matchCount,
+  hasFilters,
+  hasActiveFilters,
+  hasAppliedFilters,
+  activeCount,
+  filtersOp,
+  loading,
+  countStatus,
+  globalDisabled = false,
+  onAddTextFilter,
+  onFiltersOpChange,
+  onUpdateFilter,
+  onRemoveFilter,
+  onClearAll,
+  onSearch,
+}) {
+  const visibleFilters = filters.filter((filter) => !filter.hidden);
+  const canSearch = hasFilters || hasAppliedFilters;
+  const operatorToggleDisabled = globalDisabled || activeCount <= 1;
+
+  return (
+    <div className="sb">
+      <div className="sb-toolbar">
+        <span className="sb-toolbar-label">Filters</span>
+
+        <button
+          className="sb-add-btn sb-add-btn--text"
+          onClick={onAddTextFilter}
+          title="Add full-text filter"
+          disabled={globalDisabled}
+        >
+          + Text
+        </button>
+
+        <div className="sb-match-toggle" role="group" aria-label="Filter match operator">
+          <span className="sb-match-label">Match</span>
+          <button
+            className={`sb-match-btn ${filtersOp === FILTERS_OP.AND ? "is-active" : ""}`}
+            onClick={() => onFiltersOpChange(FILTERS_OP.AND)}
+            disabled={operatorToggleDisabled}
+            type="button"
+          >
+            All (AND)
+          </button>
+          <button
+            className={`sb-match-btn ${filtersOp === FILTERS_OP.OR ? "is-active" : ""}`}
+            onClick={() => onFiltersOpChange(FILTERS_OP.OR)}
+            disabled={operatorToggleDisabled}
+            type="button"
+          >
+            Any (OR)
+          </button>
+        </div>
+
+        {visibleFilters.length > 0 && (
+          <button className="sb-clear-all" onClick={onClearAll} disabled={globalDisabled}>
+            ✕ Clear all
+          </button>
+        )}
+
+        <button
+          className="sb-search-btn"
+          onClick={onSearch}
+          disabled={globalDisabled || !canSearch || loading}
+        >
+          Search
+        </button>
+
+        <span className="sb-count">
+          {loading ? (
+            <span>Loading counts...</span>
+          ) : countStatus === "deferred" ? (
+            <span>Preview is available. Exact filtered count will resume when ingest catches up.</span>
+          ) : countStatus === "pending" ? (
+            <span>Calculating exact count...</span>
+          ) : (
+            <>
+              <strong>{matchCount}</strong> / {totalCount} lines
+            </>
+          )}
+          {hasActiveFilters && (
+            <span className="sb-count-badge">{activeCount} active</span>
+          )}
+        </span>
+      </div>
+
+      {visibleFilters.length > 0 && (
+        <div className="sb-filters">
+          {visibleFilters.map((filter) => {
+            if (filter.type === FILTER_TYPE.TEXT) {
+              return (
+                <TextFilterRow
+                  key={filter.id}
+                  filter={filter}
+                  disabled={globalDisabled}
+                  onUpdate={(patch) => onUpdateFilter(filter.id, patch)}
+                  onRemove={() => onRemoveFilter(filter.id)}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TextFilterRow({ filter, onUpdate, onRemove, disabled = false }) {
+  return (
+    <div className="sb-row sb-row--text">
+      <span className="sb-row-type sb-row-type--text">TEXT</span>
+
+      <input
+        className="sb-input sb-input--text-query"
+        type="text"
+        placeholder="search parsed JSON text"
+        value={filter.query}
+        onChange={(e) => onUpdate({ query: e.target.value })}
+        spellCheck={false}
+        aria-label="Full text query"
+        disabled={disabled}
+      />
+
+      <button className="sb-remove" onClick={onRemove} aria-label="Remove filter" disabled={disabled}>
+        ✕
+      </button>
+    </div>
+  );
+}
