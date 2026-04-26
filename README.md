@@ -9,8 +9,7 @@ A local-first JSONL viewer optimized for large files by moving parsing and filte
 - Postgres storage for parsed JSON and raw lines.
 - Count-first UI: returns immediate totals and deferred exact match counts for heavy filters.
 - Lazy preview with keyset pagination ("Load Preview" with Next/Prev paging).
-- Field filter on indexed leaf keys under top-level `header` and `headers`, plus full-text search over parsed JSON.
-- Field index stores one row per indexed scalar leaf (`string`, `number`, `boolean`, `null`) under top-level `header` and `headers`.
+- Text-only filters powered by Postgres full-text search over `search_text`.
 - Admin actions: reload file from start, delete all ingested rows.
 - Resumes ingestion after restart using persisted byte offsets.
 
@@ -40,7 +39,7 @@ Infra / Dev
 3. In `kafka` mode, it consumes from `KAFKA_TOPIC`.
 4. It parses each record and inserts rows into Postgres in batches.
 5. The UI requests counts and a small preview page from the backend instead of loading the full file.
-6. Filters are evaluated on the server using the field index (`jsonl_entry_field_index`) plus Postgres full-text search.
+6. Filters are evaluated on the server using Postgres full-text search over `jsonl_entry.search_text`.
 
 ## Running With Docker Compose
 
@@ -156,9 +155,9 @@ Frontend nginx proxy timeout env vars:
   - Returns source id (`filePath`), counts from ingest state, last ingestion time, `sourceRevision`, `searchStatus` (`ready|building`), and `ingestPaused` (`true|false`).
 
 - `POST /api/filters/count`
-  - Body: `{ filters: [ { type, fieldPath, op, valueContains, query } ], filtersOp }`
-  - For `type: "field"`, `fieldPath` is treated as a leaf key name matched only within indexed top-level `header`/`headers` descendants.
-  - For `type: "text"`, `query` is matched with Postgres full-text search over `parsed::text`.
+  - Body: `{ filters: [ { type: "text", query } ], filtersOp }`
+  - `query` is matched with Postgres full-text search over `search_text`.
+  - Removed field-filter payloads (`fieldPath`, `valueContains`, or `filters[].type = "field"`) return `400 Bad Request`.
   - Returns `{ totalCount, matchCount, status, requestHash, sourceRevision, computedRevision, lastComputedAt }`
   - `status` is `pending|ready`; `matchCount` is `null` while pending.
 
@@ -171,7 +170,7 @@ Frontend nginx proxy timeout env vars:
   - `sortDir`: `asc | desc` (default: `desc`)
   - `limit`: page size (default: `10`, max: `500`)
   - `cursor`: opaque Base64URL cursor returned by the previous page (`null` for page 1)
-  - Field/text filter semantics are identical to `/api/filters/count`.
+  - Text-filter semantics are identical to `/api/filters/count`.
   - Returns `{ rows, nextCursor }`, where each row includes:
     - `id`, `lineNo`, `ts`
     - `key` (`parsed->'key'`)
@@ -218,6 +217,7 @@ Tables are managed via Flyway migrations.
   - `parsed JSONB`
   - `parse_error TEXT`
   - `ts TIMESTAMPTZ`
+  - `search_text TEXT`
   - `created_at TIMESTAMPTZ`
 
 Ingest behavior note:
@@ -236,12 +236,6 @@ Ingest behavior note:
   - `indexed_revision BIGINT`
   - `ingest_status TEXT`
 
-- `jsonl_entry_field_index`
-  - one row per indexed scalar leaf under top-level `header` and `headers` objects
-  - `entry_id`, `file_path`, `field_key`, `field_path`, `value_text`, `value_type`, `is_null`, `is_empty`
-  - `field_key` is the leaf key name; `field_path` is the rooted path (for example `headers.eventTime`)
-  - arrays and objects are not indexed as rows
-
 - `filter_count_cache`
   - keyed by `(file_path, request_hash)`
   - stores deferred exact-count status and computed revision metadata
@@ -249,9 +243,7 @@ Ingest behavior note:
 Indexes
 - `jsonl_entry(file_path, id)` for keyset pagination
 - `jsonl_entry(file_path, line_no, id)` for line sort pagination
-- `jsonl_entry_parsed_fts_idx` on `to_tsvector('simple', parsed::text)`
-- `jsonl_entry_field_index` btree indexes for key/null/empty lookups
-- `jsonl_entry_field_index` trigram GIN index on `value_text`
+- `jsonl_entry_search_text_fts_idx` on `to_tsvector('simple', search_text)`
 
 ## Performance Notes
 
@@ -263,7 +255,6 @@ Indexes
 
 - Use Postgres COPY for faster ingestion on large files.
 - Add field pinning (computed columns + indexes) for hot JSON paths.
-- Add optional full-text search over `parsed` or a denormalized `search_text` column.
 - Add file rotation detection by inode and auto-reset ingest state.
 
 ## Repository Layout

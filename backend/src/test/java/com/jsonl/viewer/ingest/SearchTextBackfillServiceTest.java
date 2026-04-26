@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,7 +16,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jsonl.viewer.repo.IngestState;
 import com.jsonl.viewer.repo.IngestStateRepository;
-import com.jsonl.viewer.repo.JsonlEntryFieldIndex;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.time.Instant;
@@ -27,15 +26,16 @@ import org.mockito.ArgumentCaptor;
 import org.postgresql.util.PGobject;
 import org.springframework.transaction.PlatformTransactionManager;
 
-class FieldIndexBackfillServiceTest {
+class SearchTextBackfillServiceTest {
 
   @Test
-  void backfillOneSourceRebuildsFieldIndexAndMarksSourceReady() throws Exception {
+  void backfillOneSourceRebuildsSearchTextAndMarksSourceReady() throws Exception {
     IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
-    JsonFieldIndexExtractor fieldIndexExtractor = mock(JsonFieldIndexExtractor.class);
+    JsonSearchDocumentExtractor searchDocumentExtractor = mock(JsonSearchDocumentExtractor.class);
     EntityManager entityManager = mock(EntityManager.class);
-    Query deleteQuery = mock(Query.class);
+    Query resetSearchTextQuery = mock(Query.class);
     Query selectQuery = mock(Query.class);
+    Query updateSearchTextQuery = mock(Query.class);
 
     IngestState state = new IngestState(
         "source-a",
@@ -50,20 +50,25 @@ class FieldIndexBackfillServiceTest {
         "building"
     );
 
-    when(ingestStateRepository.findPendingFieldIndexBuilds()).thenReturn(List.of(state));
+    when(ingestStateRepository.findPendingSearchTextBuilds()).thenReturn(List.of(state));
     when(ingestStateRepository.findById("source-a")).thenReturn(Optional.of(state));
     when(ingestStateRepository.save(any(IngestState.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
     when(entityManager.createNativeQuery(argThat(sql ->
-        sql != null && sql.contains("DELETE FROM jsonl_entry_field_index")))).thenReturn(deleteQuery);
+        sql != null && sql.contains("UPDATE jsonl_entry SET search_text = NULL")))).thenReturn(resetSearchTextQuery);
     when(entityManager.createNativeQuery(argThat(sql ->
         sql != null && sql.contains("SELECT id, parsed")))).thenReturn(selectQuery);
+    when(entityManager.createNativeQuery(argThat(sql ->
+        sql != null && sql.contains("UPDATE jsonl_entry SET search_text = ?1 WHERE id = ?2"))))
+        .thenReturn(updateSearchTextQuery);
 
-    when(deleteQuery.setParameter(anyInt(), any())).thenReturn(deleteQuery);
-    when(deleteQuery.executeUpdate()).thenReturn(1);
+    when(resetSearchTextQuery.setParameter(anyInt(), any())).thenReturn(resetSearchTextQuery);
+    when(resetSearchTextQuery.executeUpdate()).thenReturn(1);
 
     when(selectQuery.setParameter(anyInt(), any())).thenReturn(selectQuery);
+    when(updateSearchTextQuery.setParameter(anyInt(), any())).thenReturn(updateSearchTextQuery);
+    when(updateSearchTextQuery.executeUpdate()).thenReturn(1);
 
     PGobject pgObject = new PGobject();
     pgObject.setType("jsonb");
@@ -73,22 +78,11 @@ class FieldIndexBackfillServiceTest {
         List.of()
     );
 
-    JsonlEntryFieldIndex indexRow = new JsonlEntryFieldIndex(
-        11L,
-        "source-a",
-        "status",
-        "headers.status",
-        "ok",
-        "string",
-        false,
-        false
-    );
-    when(fieldIndexExtractor.extract(eq("source-a"), eq(11L), any(JsonNode.class)))
-        .thenReturn(List.of(indexRow));
+    when(searchDocumentExtractor.extract(any(JsonNode.class))).thenReturn("headers status ok");
 
-    FieldIndexBackfillService service = new FieldIndexBackfillService(
+    SearchTextBackfillService service = new SearchTextBackfillService(
         ingestStateRepository,
-        fieldIndexExtractor,
+        searchDocumentExtractor,
         new ObjectMapper(),
         entityManager,
         mock(PlatformTransactionManager.class)
@@ -97,8 +91,9 @@ class FieldIndexBackfillServiceTest {
     boolean processed = service.backfillOneSource();
 
     assertTrue(processed);
-    verify(deleteQuery).executeUpdate();
-    verify(entityManager).persist(indexRow);
+    verify(resetSearchTextQuery).executeUpdate();
+    verify(updateSearchTextQuery).executeUpdate();
+    verify(entityManager, never()).persist(any());
     verify(entityManager).flush();
     verify(entityManager).clear();
 
@@ -113,11 +108,11 @@ class FieldIndexBackfillServiceTest {
   @Test
   void backfillOneSourceReturnsFalseWhenNoPendingSources() {
     IngestStateRepository ingestStateRepository = mock(IngestStateRepository.class);
-    when(ingestStateRepository.findPendingFieldIndexBuilds()).thenReturn(List.of());
+    when(ingestStateRepository.findPendingSearchTextBuilds()).thenReturn(List.of());
 
-    FieldIndexBackfillService service = new FieldIndexBackfillService(
+    SearchTextBackfillService service = new SearchTextBackfillService(
         ingestStateRepository,
-        mock(JsonFieldIndexExtractor.class),
+        mock(JsonSearchDocumentExtractor.class),
         new ObjectMapper(),
         mock(EntityManager.class),
         mock(PlatformTransactionManager.class)

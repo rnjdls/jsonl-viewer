@@ -43,6 +43,9 @@ public class JsonlEntry {
   @Column(name = "parse_error", columnDefinition = "text")
   private String parseError;
 
+  @Column(name = "search_text", columnDefinition = "text")
+  private String searchText;
+
   @Column(name = "ts")
   private Instant ts;
 
@@ -58,6 +61,7 @@ public class JsonlEntry {
       String rawLine,
       JsonNode parsed,
       String parseError,
+      String searchText,
       Instant ts
   ) {
     this.filePath = filePath;
@@ -65,6 +69,7 @@ public class JsonlEntry {
     this.rawLine = rawLine;
     this.parsed = parsed;
     this.parseError = parseError;
+    this.searchText = searchText;
     this.ts = ts;
   }
 
@@ -110,6 +115,14 @@ public class JsonlEntry {
 
   public void setParseError(String parseError) {
     this.parseError = parseError;
+  }
+
+  public String getSearchText() {
+    return searchText;
+  }
+
+  public void setSearchText(String searchText) {
+    this.searchText = searchText;
   }
 
   public Instant getTs() {

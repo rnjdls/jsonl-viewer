@@ -10,5 +10,5 @@ public interface IngestStateRepository extends JpaRepository<IngestState, String
       "WHERE s.indexedRevision < s.sourceRevision " +
       "ORDER BY s.lastIngestedAt ASC"
   )
-  List<IngestState> findPendingFieldIndexBuilds();
+  List<IngestState> findPendingSearchTextBuilds();
 }

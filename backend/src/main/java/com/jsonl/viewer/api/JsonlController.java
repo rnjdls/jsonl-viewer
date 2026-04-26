@@ -141,7 +141,7 @@ public class JsonlController {
     IngestState state = ingestStateRepository.findById(sourceId)
         .orElse(new IngestState(sourceId, 0, 0, null));
     FilterCountRequest safeRequest = request == null ? new FilterCountRequest() : request;
-    List<FilterCriteria> filters = filterService.normalize(safeRequest);
+    List<FilterCriteria> filters = normalizeFiltersSafely(safeRequest);
     String normalizedFiltersOp = filterService.normalizeFiltersOp(safeRequest.getFiltersOp());
     String requestHash = filterRequestHasher.hash(normalizedFiltersOp, filters);
     long sourceRevision = state.getSourceRevision();
@@ -159,7 +159,7 @@ public class JsonlController {
       );
     }
 
-    FilterSql filterSql = filterService.buildFilterSql(filters, normalizedFiltersOp);
+    FilterSql filterSql = buildFilterSqlSafely(filters, normalizedFiltersOp);
     Snapshot snapshot = filterCountCacheService.submitCountJob(
         sourceId,
         sourceRevision,
@@ -215,8 +215,7 @@ public class JsonlController {
     }
 
     PreviewRequest safeRequest = request == null ? new PreviewRequest() : request;
-    List<FilterCriteria> filters = filterService.normalize(safeRequest);
-    FilterSql filterSql = filterService.buildFilterSql(filters, safeRequest.getFiltersOp());
+    List<FilterCriteria> filters = normalizeFiltersSafely(safeRequest);
 
     String sortDir = normalizeSortDir(safeRequest.getSortDir());
     PreviewCursor cursor = decodePreviewCursor(
@@ -224,15 +223,29 @@ public class JsonlController {
         sortDir
     );
     int limit = safeRequest.getLimit() == null ? 10 : Math.min(500, Math.max(1, safeRequest.getLimit()));
+    String singleTextQuery = filterService.extractSingleTextQuery(filters);
 
-    List<JsonlEntryRow> rows = jsonlEntryRepository.preview(
-        sourceId,
-        filterSql,
-        sortDir,
-        cursor,
-        limit,
-        toMillis(properties.getPreviewStatementTimeout())
-    );
+    List<JsonlEntryRow> rows;
+    if (singleTextQuery != null) {
+      rows = jsonlEntryRepository.previewTextOnly(
+          sourceId,
+          singleTextQuery,
+          sortDir,
+          cursor,
+          limit,
+          toMillis(properties.getPreviewStatementTimeout())
+      );
+    } else {
+      FilterSql filterSql = buildFilterSqlSafely(filters, safeRequest.getFiltersOp());
+      rows = jsonlEntryRepository.preview(
+          sourceId,
+          filterSql,
+          sortDir,
+          cursor,
+          limit,
+          toMillis(properties.getPreviewStatementTimeout())
+      );
+    }
     List<PreviewRow> responseRows = rows.stream()
         .map(row -> new PreviewRow(
             row.id(),
@@ -371,6 +384,30 @@ public class JsonlController {
       return SORT_DIR_DESC;
     }
     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported sortDir: " + rawSortDir);
+  }
+
+  private List<FilterCriteria> normalizeFiltersSafely(FilterCountRequest request) {
+    try {
+      return filterService.normalize(request);
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  private List<FilterCriteria> normalizeFiltersSafely(PreviewRequest request) {
+    try {
+      return filterService.normalize(request);
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+  }
+
+  private FilterSql buildFilterSqlSafely(List<FilterCriteria> filters, String filtersOp) {
+    try {
+      return filterService.buildFilterSql(filters, filtersOp);
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
   }
 
   private PreviewCursor toPreviewCursor(

@@ -11,7 +11,7 @@ public class AppProperties {
   private long ingestPollIntervalMs = 500;
   private int ingestBatchSize = 500;
   private long ingestMaxBytesPerPass = 3L * 1024 * 1024;
-  private Duration previewStatementTimeout = Duration.ofSeconds(20);
+  private Duration previewStatementTimeout = Duration.ofMinutes(5);
   private Duration countJobStatementTimeout = Duration.ofMinutes(10);
   private Kafka kafka = new Kafka();
 

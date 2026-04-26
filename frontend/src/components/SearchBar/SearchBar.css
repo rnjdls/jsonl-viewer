@@ -184,7 +184,6 @@
   animation: fadeSlideIn 0.15s ease both;
 }
 
-.sb-row--field     { background: rgba(77, 159, 255, 0.03); }
 .sb-row--text      { background: rgba(0, 229, 160, 0.04); }
 
 /* ── Type badge ─────────────────────────────────────────── */
@@ -197,12 +196,6 @@
   flex-shrink: 0;
   width: 48px;
   text-align: center;
-}
-
-.sb-row-type--field {
-  background: rgba(77, 159, 255, 0.12);
-  color: var(--accent2);
-  border: 1px solid rgba(77, 159, 255, 0.3);
 }
 
 .sb-row-type--text {
@@ -227,24 +220,7 @@
 .sb-input:focus       { border-color: var(--accent2); }
 .sb-input::placeholder{ color: var(--text-dim); }
 
-.sb-select {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color var(--transition);
-}
-
-.sb-select:focus { border-color: var(--accent2); }
-
-.sb-input--field    { width: 170px; }
 .sb-input--text-query { width: min(580px, calc(100vw - 160px)); }
-.sb-input--value    { width: 230px; }
-.sb-select--field-op { width: 130px; }
 
 /* ── Row separators ─────────────────────────────────────── */
 .sb-row-eq,

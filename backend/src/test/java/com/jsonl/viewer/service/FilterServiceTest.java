@@ -1,6 +1,8 @@
 package com.jsonl.viewer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jsonl.viewer.api.dto.FilterCountRequest;
@@ -43,36 +45,19 @@ class FilterServiceTest {
   }
 
   @Test
-  void normalizeDefaultsFieldOpToContainsWhenMissing() {
+  void normalizeRejectsFieldFilterType() {
     FilterSpec spec = new FilterSpec();
     spec.setType("field");
-    spec.setFieldPath("status");
-    spec.setValueContains("500");
 
     FilterCountRequest request = new FilterCountRequest();
     request.setFilters(List.of(spec));
 
-    List<FilterCriteria> normalized = filterService.normalize(request);
+    IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> filterService.normalize(request)
+    );
 
-    assertEquals(1, normalized.size());
-    assertEquals("field", normalized.get(0).type());
-    assertEquals("contains", normalized.get(0).op());
-  }
-
-  @Test
-  void normalizeNormalizesFieldOpAliases() {
-    FilterSpec spec = new FilterSpec();
-    spec.setType("field");
-    spec.setFieldPath("status");
-    spec.setOp("NOT NULL");
-
-    FilterCountRequest request = new FilterCountRequest();
-    request.setFilters(List.of(spec));
-
-    List<FilterCriteria> normalized = filterService.normalize(request);
-
-    assertEquals(1, normalized.size());
-    assertEquals("not_null", normalized.get(0).op());
+    assertEquals("Field filters are no longer supported", exception.getMessage());
   }
 
   @Test
@@ -80,52 +65,41 @@ class FilterServiceTest {
     FilterSpec timestamp = new FilterSpec();
     timestamp.setType("timestamp");
 
-    FilterSpec field = new FilterSpec();
-    field.setType("field");
-    field.setFieldPath("eventTime");
-    field.setValueContains("2026");
-
     FilterCountRequest request = new FilterCountRequest();
-    request.setFilters(List.of(timestamp, field));
+    request.setFilters(List.of(timestamp));
 
     List<FilterCriteria> normalized = filterService.normalize(request);
 
-    assertEquals(1, normalized.size());
-    assertEquals("field", normalized.get(0).type());
-  }
-
-  @Test
-  void normalizeSupportsLegacyFieldPayloadWhenNoFiltersArrayIsProvided() {
-    FilterCountRequest request = new FilterCountRequest();
-    request.setFieldPath("traceId");
-    request.setValueContains("abc");
-
-    List<FilterCriteria> normalized = filterService.normalize(request);
-
-    assertEquals(1, normalized.size());
-    assertEquals("field", normalized.get(0).type());
-    assertEquals("traceId", normalized.get(0).fieldPath());
-    assertEquals("contains", normalized.get(0).op());
-    assertEquals("abc", normalized.get(0).valueContains());
+    assertTrue(normalized.isEmpty());
   }
 
   @Test
   void buildFilterSqlAddsFullTextCandidateQuery() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("text", null, null, null, "worker failed")
+        new FilterCriteria("text", "worker failed")
     ));
 
     assertEquals(1, sql.params().size());
     assertEquals("worker failed", sql.params().get(0));
     assertTrue(sql.candidateIdsSql().contains("SELECT id FROM jsonl_entry"));
-    assertTrue(sql.candidateIdsSql().contains("parsed IS NOT NULL"));
-    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
+    assertTrue(sql.candidateIdsSql().contains("search_text IS NOT NULL"));
+    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g'))"));
+  }
+
+  @Test
+  void buildFilterSqlKeepsHyphenatedTextQueryAsSingleInputParam() {
+    FilterSql sql = filterService.buildFilterSql(List.of(
+        new FilterCriteria("text", "Auto-generated")
+    ));
+
+    assertEquals(List.of("Auto-generated"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g')"));
   }
 
   @Test
   void buildFilterSqlIgnoresBlankTextQuery() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("text", null, null, null, "   ")
+        new FilterCriteria("text", "   ")
     ));
 
     assertEquals("SELECT id FROM jsonl_entry WHERE file_path = ?1", sql.candidateIdsSql());
@@ -133,71 +107,18 @@ class FilterServiceTest {
   }
 
   @Test
-  void buildFilterSqlFieldContainsUsesFieldIndexTable() {
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "contains", "500", null)
-    ));
-
-    assertEquals(List.of("status", "%500%"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("FROM jsonl_entry_field_index"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
-    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?3"));
-  }
-
-  @Test
-  void buildFilterSqlFieldNullUsesNullPredicate() {
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "null", null, null)
-    ));
-
-    assertEquals(List.of("status"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("is_null = TRUE"));
-  }
-
-  @Test
-  void buildFilterSqlFieldNotNullUsesNotNullPredicate() {
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "status", "not_null", null, null)
-    ));
-
-    assertEquals(List.of("status"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("is_null = FALSE"));
-  }
-
-  @Test
-  void buildFilterSqlFieldEmptyUsesEmptyPredicate() {
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "details", "empty", null, null)
-    ));
-
-    assertEquals(List.of("details"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("is_empty = TRUE"));
-  }
-
-  @Test
-  void buildFilterSqlFieldNotEmptyUsesNotEmptyPredicate() {
-    FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("field", "details", "not_empty", null, null)
-    ));
-
-    assertEquals(List.of("details"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("is_empty = FALSE"));
-    assertTrue(sql.candidateIdsSql().contains("is_null = FALSE"));
-  }
-
-  @Test
   void buildFilterSqlOrModeUsesUnion() {
     FilterSql sql = filterService.buildFilterSql(
         List.of(
-            new FilterCriteria("text", null, null, null, "timeout"),
-            new FilterCriteria("field", "status", "null", null, null)
+            new FilterCriteria("text", "timeout"),
+            new FilterCriteria("text", "worker failed")
         ),
         "OR"
     );
 
-    assertEquals(List.of("timeout", "status"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?2)"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?3"));
+    assertEquals(List.of("timeout", "worker failed"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g')"));
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?3, '[^[:alnum:]]+', ' ', 'g')"));
     assertTrue(sql.candidateIdsSql().contains(" UNION "));
   }
 
@@ -205,25 +126,57 @@ class FilterServiceTest {
   void buildFilterSqlAndModeUsesIntersect() {
     FilterSql sql = filterService.buildFilterSql(
         List.of(
-            new FilterCriteria("field", "status", "null", null, null),
-            new FilterCriteria("text", null, null, null, "worker failed"),
-            new FilterCriteria("field", "details", "contains", "Auto-generated", null)
+            new FilterCriteria("text", "worker failed"),
+            new FilterCriteria("text", "Auto-generated")
         ),
         "and"
     );
 
-    assertEquals(List.of("status", "worker failed", "details", "%Auto-generated%"), sql.params());
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?2"));
-    assertTrue(sql.candidateIdsSql().contains("plainto_tsquery('simple', ?3)"));
-    assertTrue(sql.candidateIdsSql().contains("field_key = ?4"));
-    assertTrue(sql.candidateIdsSql().contains("value_text ILIKE ?5"));
+    assertEquals(List.of("worker failed", "Auto-generated"), sql.params());
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g')"));
+    assertTrue(sql.candidateIdsSql().contains("regexp_replace(?3, '[^[:alnum:]]+', ' ', 'g')"));
     assertTrue(sql.candidateIdsSql().contains(" INTERSECT "));
+  }
+
+  @Test
+  void buildFilterSqlRejectsFieldFilterCriteria() {
+    IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> filterService.buildFilterSql(List.of(
+            new FilterCriteria("field", "status")
+        ))
+    );
+
+    assertEquals("Field filters are no longer supported", exception.getMessage());
+  }
+
+  @Test
+  void extractSingleTextQueryReturnsQueryWhenOnlyOneTextFilterExists() {
+    String query = filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("text", "gateway timeout")
+    ));
+
+    assertEquals("gateway timeout", query);
+  }
+
+  @Test
+  void extractSingleTextQueryReturnsNullWhenFilterSetIsNotTextOnly() {
+    assertNull(filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("timestamp", "2026")
+    )));
+    assertNull(filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("text", "timeout"),
+        new FilterCriteria("text", "worker")
+    )));
+    assertNull(filterService.extractSingleTextQuery(List.of(
+        new FilterCriteria("text", "   ")
+    )));
   }
 
   @Test
   void buildFilterSqlIgnoresUnknownTypeAndFallsBackWhenNoValidFiltersRemain() {
     FilterSql sql = filterService.buildFilterSql(List.of(
-        new FilterCriteria("timestamp", "headers.eventTime", null, null, null)
+        new FilterCriteria("timestamp", "2026-04-10")
     ));
 
     assertEquals("SELECT id FROM jsonl_entry WHERE file_path = ?1", sql.candidateIdsSql());

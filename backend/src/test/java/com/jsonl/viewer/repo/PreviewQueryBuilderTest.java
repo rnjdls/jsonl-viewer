@@ -56,4 +56,32 @@ class PreviewQueryBuilderTest {
     assertTrue(query.sql().contains("ORDER BY e.line_no ASC, e.id ASC"));
     assertEquals(List.of(200), query.params());
   }
+
+  @Test
+  void buildsTextOnlyFastPathWithoutCursor() {
+    PreviewQuery query = PreviewQueryBuilder.buildTextOnly(
+        "asc",
+        null,
+        100
+    );
+
+    assertTrue(query.sql().contains("WHERE e.file_path = ?1"));
+    assertTrue(query.sql().contains("e.search_text IS NOT NULL"));
+    assertTrue(query.sql().contains("plainto_tsquery('simple', regexp_replace(?2, '[^[:alnum:]]+', ' ', 'g'))"));
+    assertTrue(query.sql().contains("ORDER BY e.line_no ASC, e.id ASC"));
+    assertEquals(List.of(100), query.params());
+  }
+
+  @Test
+  void buildsTextOnlyFastPathWithCursor() {
+    PreviewQuery query = PreviewQueryBuilder.buildTextOnly(
+        "desc",
+        new PreviewCursor("desc", 77L, 15L),
+        100
+    );
+
+    assertTrue(query.sql().contains("AND (e.line_no < ?3 OR (e.line_no = ?4 AND e.id < ?5))"));
+    assertTrue(query.sql().contains("ORDER BY e.line_no DESC, e.id DESC"));
+    assertEquals(List.of(77L, 77L, 15L, 100), query.params());
+  }
 }
